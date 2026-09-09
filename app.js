@@ -12,7 +12,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 /* uygulama kimligi */
 const APP = {
   name: 'Izlence',
-  version: '1.6.4',
+  version: '1.7.1',
   build: '2026-09-09',
   developer: 'kamilsaim',
   site: 'https://izlence.web.app',
@@ -35,9 +35,37 @@ function loadDB() {
 }
 let db = loadDB();
 if (!db.collections) db.collections = {}; // eski yedeklerde bu alan yok
+
+/* v1.7.1 goc: eski kayitlardaki `overview` ve uzun `cast` alanlarini at.
+   Ikisi de TMDB'den yeniden gelebiliyor; kayit basina ~%40 yer aciyor. */
+function slimDB() {
+  let touched = 0;
+  Object.values(db.movies).forEach((m) => {
+    if (m.overview !== undefined) { delete m.overview; touched++; }
+    if (Array.isArray(m.cast) && m.cast.length > CAST_KEEP) { m.cast = m.cast.slice(0, CAST_KEEP); touched++; }
+  });
+  return touched;
+}
+/* Depolama kotasi dolarsa localStorage.setItem firlatir ve o ana kadarki
+   veri diske yazilamaz. Sessizce cokmek yerine kullaniciyi uyariyoruz;
+   bellekteki `db` bozulmadan kalir, yedek alip yer acabilir. */
+let storageFull = false;   // kota doldu mu (ice aktarma dongusu buna bakar)
 function saveDB() {
   db.updatedAt = new Date().toISOString();
-  localStorage.setItem(LS.db, JSON.stringify(db));
+  try {
+    localStorage.setItem(LS.db, JSON.stringify(db));
+    storageFull = false;
+  } catch (e) {
+    const full = e && (e.name === 'QuotaExceededError'
+      || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014);
+    if (!storageFull) {
+      toast(full
+        ? 'Depolama alanı doldu — kayıt edilemedi. Ayarlar’dan yedek al, sonra bazı kayıtları sil.'
+        : 'Kayıt edilemedi: ' + (e && e.message ? e.message : 'bilinmeyen hata'));
+    }
+    if (full) storageFull = true;
+    console.warn('DB yazılamadı', e);
+  }
   renderCounts();
 }
 
@@ -142,6 +170,16 @@ const LIST_LABEL = { watched: 'İzlediklerim', favorite: 'Favoriler', watchlist:
 
 function entry(id) { return db.movies[id]; }
 
+/* Depoda ne tutulur, ne tutulmaz
+   ---------------------------------------------------------------------------
+   localStorage kotasi dar (Safari ~5 MB). Bu yuzden istendiginde TMDB'den
+   yeniden gelebilen alanlari kalici olarak saklamiyoruz:
+     - `overview` hic saklanmaz  (sadece detay ekraninda gosterilir)
+     - `cast`     ilk 3 isimle saklanir (oneri motorunun kullandigi kadari)
+   Detay ekrani icin zengin veri `cacheMovies` (oturum belligi) ve o anki TMDB
+   yanitindan `detailView()` ile kaydin uzerine bindirilir. */
+const CAST_KEEP = 3;
+
 function upsert(raw, patch) {
   const movie = norm(raw);
   const id = movie.key;
@@ -157,9 +195,8 @@ function upsert(raw, patch) {
     genre_ids: movie.genre_ids || (movie.genres || []).map((g) => g.id),
     vote_average: movie.vote_average || 0,
     runtime: movie.runtime || null,
-    overview: movie.overview || '',
     directors: movie.directors || [],
-    cast: movie.cast || [],
+    cast: (movie.cast || []).slice(0, CAST_KEEP),
     lists: { watched: false, favorite: false, watchlist: false },
     myRating: null,
     note: '',
@@ -169,9 +206,8 @@ function upsert(raw, patch) {
   if (movie.runtime) cur.runtime = movie.runtime;
   if (movie.genres && movie.genres.length) cur.genre_ids = movie.genres.map((g) => g.id);
   if (movie.directors && movie.directors.length) cur.directors = movie.directors;
-  if (movie.cast && movie.cast.length) cur.cast = movie.cast;
+  if (movie.cast && movie.cast.length) cur.cast = movie.cast.slice(0, CAST_KEEP);
   if (movie.backdrop_path) cur.backdrop_path = movie.backdrop_path;
-  if (movie.overview) cur.overview = movie.overview;
   if (movie.seasons) cur.seasons = movie.seasons;
   if (movie.episodes) cur.episodes = movie.episodes;
   if (movie.epRuntime) cur.epRuntime = movie.epRuntime;
@@ -283,6 +319,11 @@ function renderGrid(el, list) {
   movies.forEach((m) => cacheMovies.set(m.key, m));
   el.innerHTML = movies.map(cardHTML).join('');
 }
+function appendGrid(el, list) {
+  const movies = list.map((m) => norm(m));
+  movies.forEach((m) => cacheMovies.set(m.key, m));
+  el.insertAdjacentHTML('beforeend', movies.map(cardHTML).join(''));
+}
 
 /* --------------------------------- search -------------------------------- */
 
@@ -317,19 +358,24 @@ async function searchByImdb(id) {
 /* film + dizi birlikte arama */
 async function searchTitles(text, opts) {
   const o = opts || {};
+  const page = o.page || 1;
   if (o.year) {
     const [mv, tv] = await Promise.all([
-      tmdb('/search/movie', { query: text, include_adult: 'false', primary_release_year: o.year, language: o.language }).catch(() => ({})),
-      tmdb('/search/tv', { query: text, include_adult: 'false', first_air_date_year: o.year, language: o.language }).catch(() => ({})),
+      tmdb('/search/movie', { query: text, include_adult: 'false', primary_release_year: o.year, language: o.language, page }).catch(() => ({})),
+      tmdb('/search/tv', { query: text, include_adult: 'false', first_air_date_year: o.year, language: o.language, page }).catch(() => ({})),
     ]);
-    return (mv.results || []).map((x) => norm(x, 'movie'))
+    const items = (mv.results || []).map((x) => norm(x, 'movie'))
       .concat((tv.results || []).map((x) => norm(x, 'tv')))
       .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+    items.hasMore = page < Math.max(mv.total_pages || 1, tv.total_pages || 1);
+    return items;
   }
-  const d = await tmdb('/search/multi', { query: text, include_adult: 'false', language: o.language });
-  return (d.results || [])
+  const d = await tmdb('/search/multi', { query: text, include_adult: 'false', language: o.language, page });
+  const items = (d.results || [])
     .filter((r) => r.media_type === 'movie' || r.media_type === 'tv')
     .map((x) => norm(x));
+  items.hasMore = page < (d.total_pages || 1);
+  return items;
 }
 
 /* seri / koleksiyon araması: "Yüzüklerin Efendisi" -> serinin tüm filmleri */
@@ -344,19 +390,23 @@ async function collectionParts(id) {
 }
 
 /* konu / anahtar kelime araması: "zaman yolculuğu", "seri katil", "uzay" */
-async function keywordTitles(text) {
+async function keywordTitles(text, page) {
   const k = await tmdb('/search/keyword', { query: text }).catch(() => ({}));
   const first = (k.results || [])[0];
   if (!first) return null;
+  return keywordPage(first, page || 1);
+}
+
+async function keywordPage(kw, page) {
   const [mv, tv] = await Promise.all([
-    tmdb('/discover/movie', { with_keywords: first.id, sort_by: 'popularity.desc', include_adult: 'false' }).catch(() => ({})),
-    tmdb('/discover/tv', { with_keywords: first.id, sort_by: 'popularity.desc' }).catch(() => ({})),
+    tmdb('/discover/movie', { with_keywords: kw.id, sort_by: 'popularity.desc', include_adult: 'false', page }).catch(() => ({})),
+    tmdb('/discover/tv', { with_keywords: kw.id, sort_by: 'popularity.desc', page }).catch(() => ({})),
   ]);
   const items = (mv.results || []).map((x) => norm(x, 'movie'))
     .concat((tv.results || []).map((x) => norm(x, 'tv')))
-    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
-    .slice(0, 30);
-  return items.length ? { kw: first, items } : null;
+    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+  items.hasMore = page < Math.max(mv.total_pages || 1, tv.total_pages || 1);
+  return items.length ? { kw, items } : null;
 }
 
 /* boş arama ekranı: bu hafta trend olanlar */
@@ -372,6 +422,7 @@ async function searchPeople(text) {
   return (d.results || []).filter((p) => (p.known_for_department || '') !== '');
 }
 
+/* Kisinin tum filmografisi (kirpilmadan) — cagiran taraf sayfalayarak gosterir */
 async function personFilms(person) {
   const d = await tmdb('/person/' + person.id + '/combined_credits');
   const crew = (d.crew || []).filter((c) => ['Director', 'Writer'].indexOf(c.job) !== -1);
@@ -379,8 +430,11 @@ async function personFilms(person) {
   const seen = new Set();
   return all
     .filter((m) => m.title && !seen.has(m.key) && seen.add(m.key))
-    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
-    .slice(0, 40);
+    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+}
+
+function normName(s) {
+  return (s || '').toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
 
 function tipsHTML(q) {
@@ -401,6 +455,45 @@ function tipsHTML(q) {
 
 let searchToken = 0;
 
+/* "Daha fazla goster" durumu.
+   next(): bir sonraki parcayi getirir, {items, hasMore} doner. */
+let moreState = null;
+
+function setMore(state) {
+  moreState = state;
+  const wrap = $('#search-more-wrap');
+  if (!wrap) return;
+  wrap.hidden = !state;
+  const btn = $('#search-more');
+  if (btn) { btn.disabled = false; btn.textContent = 'Daha fazla göster'; }
+}
+
+/* uzak (TMDB sayfali) kaynak icin durum */
+const remoteMore = (fetchPage, startPage) => {
+  let page = startPage;
+  return {
+    async next() {
+      page++;
+      const items = await fetchPage(page);
+      return { items: items || [], hasMore: !!(items && items.hasMore) };
+    },
+  };
+};
+
+/* yerel (tek seferde gelen uzun liste) kaynak icin durum */
+const localMore = (all, shown, step) => {
+  let at = shown;
+  return {
+    async next() {
+      const items = all.slice(at, at + step);
+      at += items.length;
+      return { items, hasMore: at < all.length };
+    },
+  };
+};
+
+const PERSON_STEP = 40;
+
 function countMsg(items) {
   const f = items.filter((m) => m.mtype !== 'tv').length;
   const t = items.length - f;
@@ -412,6 +505,7 @@ function countMsg(items) {
 const runSearch = debounce(async (raw) => {
   const status = $('#search-status'), grid = $('#search-results'), empty = $('#search-empty');
   const token = ++searchToken;
+  setMore(null);
   if (!raw.trim()) {
     grid.innerHTML = ''; status.textContent = ''; status.className = 'status'; empty.hidden = false;
     if (getKey()) {
@@ -432,13 +526,14 @@ const runSearch = debounce(async (raw) => {
   status.className = 'status'; status.textContent = 'Aranıyor…';
 
   const p = parseQuery(raw);
-  const done = (msg, results, extra) => {
+  const done = (msg, results, extra, more) => {
     if (token !== searchToken) return true;   // daha yeni bir arama başladı
     status.className = 'status';
     status.textContent = msg;
     grid.innerHTML = '';
     if (results && results.length) renderGrid(grid, results);
     if (extra) grid.insertAdjacentHTML('afterbegin', extra);
+    setMore(more || null);
     return true;
   };
 
@@ -452,21 +547,58 @@ const runSearch = debounce(async (raw) => {
       return done('IMDb kodu ' + p.imdbId + ' için yapım bulunamadı.', [], tipsHTML(raw));
     }
 
+    // sayfalanabilir baslik aramasi: hasMore bayragini filtreden sonra da korur
+    const titles = async (opts) => {
+      const r = await searchTitles(p.text, opts);
+      const out = r.filter((m) => m.title);
+      out.hasMore = r.hasMore;
+      return out;
+    };
+    const titleMore = (opts, list) => (list.hasMore
+      ? remoteMore((page) => titles(Object.assign({}, opts, { page })), 1) : null);
+
     // 2/3) başlık — film + dizi birlikte (varsa yıl filtresiyle)
-    let results = (await searchTitles(p.text, { year: p.year })).filter((m) => m.title);
+    let results = await titles({ year: p.year });
 
     if (!results.length && p.year) {   // yılı gevşet
-      results = (await searchTitles(p.text)).filter((m) => m.title);
-      if (results.length) return done(countMsg(results) + ' · ' + p.year + ' yılı filtresi kaldırıldı', results);
+      results = await titles({});
+      if (results.length) {
+        return done(countMsg(results) + ' · ' + p.year + ' yılı filtresi kaldırıldı', results,
+          '', titleMore({}, results));
+      }
     }
 
-    if (results.length) return done(countMsg(results), results);
+    // sorgu bir kişinin adıyla birebir eşleşiyorsa (örn. "Tom Hardy"), az sayıda
+    // rastgele başlık eşleşmesi yerine doğrudan o kişinin filmografisini göster
+    if (!p.year) {
+      const exactPeople = await searchPeople(p.text).catch(() => []);
+      const exactPerson = exactPeople.find((x) => normName(x.name) === normName(p.text));
+      if (exactPerson) {
+        status.textContent = 'Kişi olarak aranıyor…';
+        const films = await personFilms(exactPerson);
+        if (films.length) {
+          const others = exactPeople.filter((x) => x.id !== exactPerson.id).slice(0, 3).map((x) =>
+            `<button class="chip" data-person="${x.id}">${esc(x.name)}</button>`).join('');
+          const head = others ? `<div class="chip-row">${others}</div>` : '';
+          const first = films.slice(0, PERSON_STEP);
+          return done(esc(exactPerson.name) + ' · ' + countMsg(films), first, head,
+            films.length > first.length ? localMore(films, first.length, PERSON_STEP) : null);
+        }
+      }
+    }
+
+    if (results.length) {
+      return done(countMsg(results), results, '', titleMore({ year: p.year }, results));
+    }
 
     // 4) İngilizce / orijinal başlık denemesi
     if (getLang() !== 'en-US') {
       status.textContent = 'Orijinal başlıkla deneniyor…';
-      results = (await searchTitles(p.text, { language: 'en-US' })).filter((m) => m.title);
-      if (results.length) return done(countMsg(results) + ' · orijinal başlıkla bulundu', results);
+      results = await titles({ language: 'en-US' });
+      if (results.length) {
+        return done(countMsg(results) + ' · orijinal başlıkla bulundu', results, '',
+          titleMore({ language: 'en-US' }, results));
+      }
     }
 
     // 4b) seri / koleksiyon
@@ -491,14 +623,22 @@ const runSearch = debounce(async (raw) => {
         const others = people.slice(1, 4).map((x) =>
           `<button class="chip" data-person="${x.id}">${esc(x.name)}</button>`).join('');
         const head = `<div class="chip-row">${others}</div>`;
-        return done(esc(person.name) + ' · ' + countMsg(films), films, others ? head : '');
+        const first = films.slice(0, PERSON_STEP);
+        return done(esc(person.name) + ' · ' + countMsg(films), first, others ? head : '',
+          films.length > first.length ? localMore(films, first.length, PERSON_STEP) : null);
       }
     }
 
     // 6) konu / anahtar kelime
     status.textContent = 'Konu olarak aranıyor…';
     const kw = await keywordTitles(p.text);
-    if (kw) return done('Konu: ' + esc(kw.kw.name) + ' · ' + countMsg(kw.items), kw.items);
+    if (kw) {
+      return done('Konu: ' + esc(kw.kw.name) + ' · ' + countMsg(kw.items), kw.items, '',
+        kw.items.hasMore ? remoteMore(async (page) => {
+          const r = await keywordPage(kw.kw, page);
+          return r ? r.items : [];
+        }, 1) : null);
+    }
 
     // 7) ipuçları
     return done('“' + raw + '” için sonuç bulunamadı.', [], tipsHTML(raw));
@@ -516,14 +656,38 @@ document.addEventListener('click', async (ev) => {
   if (!chip) return;
   const status = $('#search-status'), grid = $('#search-results');
   status.className = 'status'; status.textContent = 'Yükleniyor…';
+  setMore(null);
   try {
     const films = chip.dataset.collection
       ? await collectionParts(chip.dataset.collection)
       : await personFilms({ id: chip.dataset.person });
     status.textContent = chip.textContent + ' · ' + countMsg(films);
     grid.innerHTML = '';
-    renderGrid(grid, films);
+    const first = films.slice(0, PERSON_STEP);
+    renderGrid(grid, first);
+    if (films.length > first.length) setMore(localMore(films, first.length, PERSON_STEP));
   } catch (err) { status.className = 'status err'; status.textContent = err.message; }
+});
+
+// "Daha fazla göster"
+document.addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('#search-more');
+  if (!btn || !moreState) return;
+  const state = moreState;
+  btn.disabled = true; btn.textContent = 'Yükleniyor…';
+  try {
+    const r = await state.next();
+    if (moreState !== state) return;            // arada yeni arama basladi
+    appendGrid($('#search-results'), r.items);
+    if (r.hasMore && r.items.length) {
+      btn.disabled = false; btn.textContent = 'Daha fazla göster';
+    } else {
+      setMore(null);
+    }
+  } catch (err) {
+    btn.disabled = false; btn.textContent = 'Daha fazla göster';
+    toast(err.message || 'Yüklenemedi');
+  }
 });
 
 /* --------------------------------- library ------------------------------- */
@@ -1125,7 +1289,7 @@ async function scanSeries(rescan) {
 async function openMovie(id) {
   const sheet = $('#sheet'), body = $('#sheet-body');
   openId = String(id);
-  const base = db.movies[String(id)] || cacheMovies.get(String(id)) || { id };
+  const base = detailView(id, cacheMovies.get(String(id))) || cacheMovies.get(String(id)) || { id };
   sheet.hidden = false;
   document.body.style.overflow = 'hidden';
   body.innerHTML = renderDetail(base, true);
@@ -1153,7 +1317,7 @@ async function openMovie(id) {
     if (db.movies[String(id)]) upsert(full, {});
   } catch (e) { /* çevrimdışı: elimizdeki veriyle devam */ }
 
-  body.innerHTML = renderDetail(db.movies[String(id)] || full, false);
+  body.innerHTML = renderDetail(detailView(id, full), false);
   wireDetail(full);
 
   // seri arka planda gelir, geldiğinde sayfa tazelenir
@@ -1164,10 +1328,25 @@ async function openMovie(id) {
       if (!ser) return;
       ser.parts.forEach((p) => cacheMovies.set(keyOf(p), p));
       if (openId !== String(id) || $('#sheet').hidden) return;
-      body.innerHTML = renderDetail(db.movies[String(id)] || full, false);
+      body.innerHTML = renderDetail(detailView(id, full), false);
       wireDetail(full);
     }).catch(() => {});
   }
+}
+
+/* Detay ekrani icin gorunum: kalici kayit + saklanmayan zengin alanlar.
+   `overview`, tam oyuncu listesi ve yayin platformlari diske yazilmiyor;
+   taze TMDB yaniti ya da oturum belleginden bindirilir. */
+function detailView(id, full) {
+  const saved = db.movies[String(id)];
+  if (!saved) return full;
+  const rich = full || cacheMovies.get(String(id)) || {};
+  const out = Object.assign({}, saved);
+  if (rich.overview) out.overview = rich.overview;
+  if (rich.cast && rich.cast.length) out.cast = rich.cast;
+  if (rich.providers && rich.providers.length) out.providers = rich.providers;
+  if (rich.providerLink) out.providerLink = rich.providerLink;
+  return out;
 }
 
 function renderDetail(m, loading) {
@@ -1234,14 +1413,14 @@ function wireDetail(movie) {
   const ownActs = $$('[data-act]', body).filter((b) => !b.classList.contains('quick-btn') && !b.closest('.card-movie'));
   ownActs.forEach((b) => b.addEventListener('click', () => {
     toggleList(movie, b.dataset.act);
-    body.innerHTML = renderDetail(db.movies[keyOf(movie)] || movie, false);
+    body.innerHTML = renderDetail(detailView(keyOf(movie), movie), false);
     wireDetail(movie);
     refreshActive();
   }));
   $$('[data-rate]', body).filter((b) => !b.closest('.card-movie')).forEach((b) => b.addEventListener('click', () => {
     const v = Number(b.dataset.rate);
     upsert(movie, { myRating: v || null });
-    body.innerHTML = renderDetail(db.movies[keyOf(movie)] || movie, false);
+    body.innerHTML = renderDetail(detailView(keyOf(movie), movie), false);
     wireDetail(movie);
     refreshActive();
     toast(v ? 'Puanın: ' + v + '/10' : 'Puan kaldırıldı');
@@ -1250,7 +1429,7 @@ function wireDetail(movie) {
   const saveProg = (sv, ev2) => {
     const sN = Number(sv) || null, eN = Number(ev2) || null;
     upsert(movie, { progress: sN ? { s: sN, e: eN } : null });
-    body.innerHTML = renderDetail(db.movies[keyOf(movie)] || movie, false);
+    body.innerHTML = renderDetail(detailView(keyOf(movie), movie), false);
     wireDetail(movie);
     refreshActive();
     toast(sN ? 'Kaldığın yer: S' + sN + (eN ? 'B' + eN : '') : 'İlerleme sıfırlandı');
@@ -1269,7 +1448,7 @@ function wireDetail(movie) {
     if (!ser) return;
     let n = 0;
     ser.parts.forEach((p) => { if (!entry(keyOf(p))) { toggleList(p, 'watchlist'); n++; } });
-    body.innerHTML = renderDetail(db.movies[keyOf(movie)] || movie, false);
+    body.innerHTML = renderDetail(detailView(keyOf(movie), movie), false);
     wireDetail(movie);
     refreshActive();
     toast(n + ' yapım izleyeceklerine eklendi');
@@ -1355,6 +1534,11 @@ async function importImdbCsv(file) {
     const dt = iDate >= 0 ? new Date(r[iDate]) : null;
     if (dt && !isNaN(dt.getTime())) patch.addedAt = dt.toISOString();
     upsert(hit, patch);
+    if (storageFull) {   // kota doldu: devam etmek anlamsiz, yazilamiyor
+      refreshActive();
+      return setS('err', 'Depolama alanı doldu — ' + (i + 1) + '/' + rows.length
+        + ' satırda durduruldu. Ayarlar’dan yedek al, sonra bazı kayıtları silip tekrar dene.');
+    }
     if (cur) updated++; else added++;
     if (i % 25 === 24) saveDB();
     await sleep(110);
@@ -1386,6 +1570,7 @@ function refreshActive() {
 /* ---------------------------------- init --------------------------------- */
 
 function init() {
+  if (slimDB()) saveDB();   // eski kayitlari kucult (bir kerelik)
   renderCounts();
 
   // sekmeler
@@ -1561,6 +1746,7 @@ function init() {
         if (!inc || typeof inc.movies !== 'object') throw new Error('biçim');
         let added = 0;
         Object.entries(inc.movies).forEach(([id, m]) => { if (!db.movies[id]) added++; db.movies[id] = m; });
+        slimDB();   // eski yedekler `overview` ve uzun `cast` tasiyor olabilir
         if (inc.genres) db.genres = Object.assign({}, inc.genres, db.genres);
         if (inc.aiMemory) { db.aiMemory = trimMemory(inc.aiMemory); localStorage.setItem(LS.memory, db.aiMemory); }
 

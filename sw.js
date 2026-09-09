@@ -1,10 +1,11 @@
 /* İzlence service worker — uygulama kabuğu çevrimdışı, TMDB istekleri ağ-önce */
-const VERSION = 'izlence-v1.6.4';
+const VERSION = 'izlence-v1.7.1';
 const SHELL = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './gizlilik.html',
   './manifest.webmanifest',
   './icons/icon-192.png',
   './icons/icon-512.png',

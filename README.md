@@ -22,7 +22,7 @@ Tamamen tarayıcıda çalışır. Hesap yok, sunucu yok, takip yok.
 
 | | |
 | --- | --- |
-| **Keşfet** | Film, dizi, kişi, yıl veya IMDb kodu ile arama. Sonuç çıkmazsa sorgu kademeli gevşetilir. |
+| **Keşfet** | Film, dizi, kişi, yıl veya IMDb kodu ile arama. Sonuç çıkmazsa sorgu kademeli gevşetilir. Sonuçlar sayfalanır, altındaki düğmeyle uzar. |
 | **Listelerim** | İzlediklerim, Favoriler, İzleyeceklerim. Puan, kişisel not, dizilerde sezon-bölüm takibi. |
 | **Öneriler** | Zevk profiline göre skorlanmış öneriler. İstersen sadece abone olduğun platformlardan. |
 | **AI** | Google Gemini zevk profilini okuyup gerekçeli öneri yapar ve seni tanıyan bir hafıza tutar. |
@@ -90,13 +90,29 @@ node bump.mjs 1.9.3 "not"  # belirli sürüm ve sürüm notu
 
 iOS'ta ana ekrana eklenen sürümde görüntü alanı etiketi kritiktir. `viewport-fit=cover`, `maximum-scale` veya `user-scalable=no` eklemek alt menüyü ekranın altından koparır. Etiket sade tutulmalı, yakınlaştırma engelleme dokunma davranışı ve jest olaylarıyla yapılır.
 
+## Arama
+
+Arama tek bir TMDB çağrısı değil, kademeli genişleyen bir zincir: IMDb kodu → yıl filtreli başlık → seçili dilde başlık → orijinal başlık → seri/koleksiyon → kişi → konu/anahtar kelime. İlk dolu gelen kademe kazanır.
+
+Sorgu bir kişinin adıyla birebir eşleşiyorsa (örneğin `Tom Hardy`), aynı adı taşıyan birkaç rastgele başlık yerine doğrudan o kişinin filmografisi listelenir. Uzun sonuç kümeleri kırpılmaz; altındaki **Daha fazla göster** düğmesi başlık ve konu aramasında sonraki TMDB sayfasını çeker, filmografide kırkar kırkar açar.
+
 ## Yol haritası
 
 Android Studio ile APK paketlemesi planlanıyor. Uygulama zaten yüklenebilir bir PWA olduğu için Trusted Web Activity yolu tercih edilecek; site aynı kalır, Android sürümü onu sarmalar.
 
+**Google ile giriş ve cihazlar arası senkron.** Şu an her şey cihazda duruyor ve tek koruma elle alınan yedek. iOS'ta tarayıcı depolamasının silinebilmesi bunu kırılgan kılıyor, bu yüzden isteğe bağlı bir hesap katmanı eklenecek: giriş yapan kullanıcının verisi buluta yedeklenir ve cihazlar arasında senkronlanır. Giriş zorunlu olmayacak — hesapsız kullanım bugünkü gibi çalışmaya devam edecek, yerel depolama birincil kaynak olarak kalacak.
+
 ## Veri ve gizlilik
 
 Tüm veriler cihazının `localStorage` alanında durur. Hesap, sunucu ve analitik yoktur.
+
+### Depolama sınırı
+
+Kayıtlar tek bir `localStorage` anahtarında durur ve tarayıcı kotası dardır: Chrome ve Firefox'ta ~10 MB, Safari ve iOS'ta ~5 MB. Bu yüzden yalnızca yeniden üretilemeyen veriler saklanır. Özet metni (`overview`) hiç yazılmaz, oyuncu listesi öneri motorunun kullandığı ilk üç isimle sınırlanır; detay ekranı bunları o an TMDB'den tazeler. Kayıt başına ~0,5 KB düşer, yani pratik tavan **iOS'ta ~5.000, masaüstünde ~10.000 yapım**.
+
+Kota yine de dolarsa uygulama çökmez: bir uyarı gösterir, verin bellekte sağlam kalır ve IMDb içe aktarımı kaçıncı satırda durduğunu bildirip temiz şekilde çıkar. Bu durumda yedek alıp bazı kayıtları silmen yeterli.
+
+> iOS'ta ayrı bir risk var: Safari, uzun süre açılmayan sitelerin depolamasını yedi gün sonra silebiliyor. Ana ekrana eklenmiş PWA'da bu risk düşer ama sıfırlanmaz — asıl koruma düzenli yedek.
 
 **Ayarlar → JSON dışa aktar** ile yedek al, başka cihazda içe aktar. Listende on yapımdan fazlası varsa ve otuz gündür yedek almadıysan uygulama seni uyarır. Yedeğe API anahtarlarını da ekleyen bir seçenek var, varsayılan olarak kapalıdır. Anahtarlı yedek düz metindir, sadece kendi cihazların arasında taşı.
 

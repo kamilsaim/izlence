@@ -1,5 +1,5 @@
 {
-  "version": "1.6.4",
+  "version": "1.7.1",
   "build": "2026-09-09",
-  "notes": "Gizlilik politikasi sayfasi eklendi."
+  "notes": "Kayıt boyutu yarıya indi: overview saklanmıyor, cast 3 isimle sınırlı; kapasite 2 katına çıktı"
 }
