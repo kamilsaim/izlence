@@ -25,6 +25,8 @@ html,body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;overscr
 /* iOS, tasan bir blok gorunce yazilari kendiliginden buyutuyor (text inflation);
    bu da sayfayi daha da genisletip sag tarafi kesiyordu. */
 html{height:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* cift dokunusla yakinlastirmayi kapat, kaydirma ve dokunma tepkisi kalsin */
+html,body{touch-action:manipulation}
 body{
   background:var(--canvas); color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;

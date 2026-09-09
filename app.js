@@ -12,7 +12,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 /* uygulama kimligi */
 const APP = {
   name: 'Izlence',
-  version: '1.5.4',
+  version: '1.5.5',
   build: '2026-09-09',
   developer: 'kamilsaim',
   site: 'https://izlence.web.app',
@@ -1596,6 +1596,8 @@ function init() {
     });
   }
 
+  blockZoom();
+
   checkUpdate(false);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) checkUpdate(false);
@@ -1604,6 +1606,29 @@ function init() {
   if (upBtn) upBtn.addEventListener('click', applyUpdate);
   const chk = $('#check-update');
   if (chk) chk.addEventListener('click', () => checkUpdate(true));
+}
+
+/* --------------------------- yakinlastirmayi kapat ------------------------
+   iOS Safari viewport'taki user-scalable=no'yu yok sayiyor; parmakla
+   yakinlastirma icin gesture olaylarini, cift dokunus icin de ikinci
+   dokunusu engelliyoruz. Tek dokunus, kaydirma ve yatay kaydirma calisir. */
+
+function blockZoom() {
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach((t) => {
+    document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
+  });
+  let lastAt = 0, lastX = 0, lastY = 0;
+  document.addEventListener('touchend', (e) => {
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+    const now = Date.now();
+    const near = Math.abs(t.clientX - lastX) < 40 && Math.abs(t.clientY - lastY) < 40;
+    // yalnizca ayni noktaya gelen hizli ikinci dokunusu engelle; boylece
+    // farkli dugmelere art arda basmak calismaya devam eder
+    if (now - lastAt < 320 && near) e.preventDefault();
+    lastAt = now; lastX = t.clientX; lastY = t.clientY;
+  }, { passive: false });
+  document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
 }
 
 /* ------------------------------ surum kontrolu ---------------------------
