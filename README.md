@@ -104,6 +104,8 @@ IMDb hesabından indirdiğin `ratings.csv` dosyasını **Ayarlar → IMDb puanla
 
 Tarayıcı verisini temizlersen listeler silinir. Düzenli yedek al.
 
+Ayrıntılı [gizlilik politikası](https://izlence.web.app/gizlilik.html) ayrı bir sayfada.
+
 ---
 
 <div align="center">
