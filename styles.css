@@ -21,7 +21,7 @@
   }
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden}
+html,body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;overscroll-behavior:none}
 /* iOS, tasan bir blok gorunce yazilari kendiliginden buyutuyor (text inflation);
    bu da sayfayi daha da genisletip sag tarafi kesiyordu. */
 html{height:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}

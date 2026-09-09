@@ -1,5 +1,5 @@
 {
-  "version": "1.5.3",
+  "version": "1.5.4",
   "build": "2026-09-09",
-  "notes": "iOS yazi buyutme ve yatay tasma duzeltildi."
+  "notes": "iOS ana ekranda alt menu ekranin altina yaslandi."
 }
