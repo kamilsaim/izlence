@@ -12,7 +12,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 /* uygulama kimligi */
 const APP = {
   name: 'Izlence',
-  version: '1.5.2',
+  version: '1.5.3',
   build: '2026-09-09',
   developer: 'kamilsaim',
   site: 'https://izlence.web.app',

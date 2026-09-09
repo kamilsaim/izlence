@@ -5,8 +5,12 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**",
+      ".git/**",
+      ".github/**",
+      ".firebase/**",
       "README.md",
-      ".github/**"
+      "*.jpeg",
+      "*.jpg"
     ],
     "rewrites": [
       {
