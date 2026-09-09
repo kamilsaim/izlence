@@ -50,7 +50,7 @@
       <h2>Film aramaya başla</h2>
       <p>Bulduğun filmleri <b>İzledim</b>, <b>Favori</b> veya <b>İzleyeceğim</b> listene ekle. Öneri motoru ve analizler bu listelerden beslenir.</p>
       <p class="muted">Bulamazsan orijinal adını, yılını (<code>Dune 2021</code>), IMDb kodunu (<code>tt1375666</code>) veya yönetmen adını yazabilirsin.</p>
-      <button class="btn btn-primary" data-go="settings">TMDB anahtarını gir</button>
+      <button id="search-key-cta" class="btn btn-primary" data-go="settings">TMDB anahtarını gir</button>
     </div>
   </section>
 
@@ -141,8 +141,8 @@
     <div id="ai-empty" class="empty">
       <div class="empty-emoji">🧠</div>
       <h2>AI önerilerini aç</h2>
-      <p>Ücretsiz bir Google AI Studio anahtarı gir, en az 3 film ekle. Gemini zevkini yorumlayıp neden önerdiğini de yazar.</p>
-      <button class="btn btn-primary" data-go="settings">Google AI anahtarı ekle</button>
+      <p id="ai-empty-text">Ücretsiz bir Google AI Studio anahtarı gir, en az 3 film ekle. Gemini zevkini yorumlayıp neden önerdiğini de yazar.</p>
+      <button id="ai-key-cta" class="btn btn-primary" data-go="settings">Google AI anahtarı ekle</button>
     </div>
   </section>
 

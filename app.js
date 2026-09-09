@@ -12,7 +12,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 /* uygulama kimligi */
 const APP = {
   name: 'Izlence',
-  version: '1.6.1',
+  version: '1.6.2',
   build: '2026-09-09',
   developer: 'kamilsaim',
   site: 'https://izlence.web.app',
@@ -1475,6 +1475,7 @@ function init() {
       db.genres = {}; await ensureGenres();
       renderProviderPicker();
       s.className = 'status ok'; s.textContent = '✓ Anahtar çalışıyor. Artık film ve dizi arayabilirsin.';
+      refreshKeyPrompts();
     } catch (err) { s.className = 'status err'; s.textContent = err.message; }
   });
 
@@ -1572,6 +1573,7 @@ function init() {
           if (k.gmodel) localStorage.setItem(LS.gmodel, k.gmodel);
           if (k.lang) { localStorage.setItem(LS.lang, k.lang); const li = $('#lang'); if (li) li.value = k.lang; }
           if (Array.isArray(k.providers)) setProviders(k.providers);
+          refreshKeyPrompts();
           db.genres = {};
           ensureGenres().then(() => refreshActive()).catch(() => {});
           renderProviderPicker();
@@ -1598,7 +1600,7 @@ function init() {
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; $('#install').hidden = false; });
   $('#install').addEventListener('click', async () => { if (deferred) { deferred.prompt(); deferred = null; $('#install').hidden = true; } });
 
-  if (getKey()) $('#search-empty').querySelector('.btn').hidden = true;
+  refreshKeyPrompts();
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -1658,6 +1660,25 @@ function blockZoom() {
     lastAt = now; lastX = t.clientX; lastY = t.clientY;
   }, { passive: false });
   document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+}
+
+/* --------------------------- anahtar cagrilarini gizle --------------------
+   Anahtar kaydedildikten sonra bos ekranlardaki "anahtar ekle" dugmeleri
+   duruyordu; anahtar varsa dugme ve metin gizlenir. */
+
+function refreshKeyPrompts() {
+  const sBtn = $('#search-key-cta');
+  if (sBtn) sBtn.hidden = !!getKey();
+
+  const aBtn = $('#ai-key-cta');
+  if (aBtn) aBtn.hidden = !!getGKey();
+
+  const aTxt = $('#ai-empty-text');
+  if (aTxt) {
+    aTxt.textContent = getGKey()
+      ? 'En az 3 film ekle, sonra "Oneri iste" dugmesine bas. Gemini zevkini yorumlayip neden onerdigini de yazar.'
+      : 'Ucretsiz bir Google AI Studio anahtari gir, en az 3 film ekle. Gemini zevkini yorumlayip neden onerdigini de yazar.';
+  }
 }
 
 /* ------------------------------- yedek uyarisi ----------------------------
@@ -2195,6 +2216,7 @@ function initAI() {
   $('#gkey-save').addEventListener('click', () => {
     localStorage.setItem(LS.gkey, gkey.value.trim());
     localStorage.removeItem(LS.glast);
+    refreshKeyPrompts();
     refreshModels(true);
   });
 
