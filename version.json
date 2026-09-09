@@ -1,5 +1,5 @@
 {
-  "version": "1.6.0",
+  "version": "1.6.1",
   "build": "2026-09-09",
-  "notes": "Surum betigi, AI hafiza siniri, saglayici onbellegi, yedek hatirlatmasi."
+  "notes": "Kesfet arama kutusu ust cubuga sabitlendi."
 }
