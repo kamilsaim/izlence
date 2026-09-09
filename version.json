@@ -1,5 +1,5 @@
 {
-  "version": "1.5.5",
+  "version": "1.5.6",
   "build": "2026-09-09",
-  "notes": "Yakinlastirma kapatildi."
+  "notes": "Alt menu konumu geri alindi, yakinlastirma kapali kaldi."
 }
