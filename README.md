@@ -90,6 +90,10 @@ node bump.mjs 1.9.3 "not"  # belirli sürüm ve sürüm notu
 
 iOS'ta ana ekrana eklenen sürümde görüntü alanı etiketi kritiktir. `viewport-fit=cover`, `maximum-scale` veya `user-scalable=no` eklemek alt menüyü ekranın altından koparır. Etiket sade tutulmalı, yakınlaştırma engelleme dokunma davranışı ve jest olaylarıyla yapılır.
 
+## Yol haritası
+
+Android Studio ile APK paketlemesi planlanıyor. Uygulama zaten yüklenebilir bir PWA olduğu için Trusted Web Activity yolu tercih edilecek; site aynı kalır, Android sürümü onu sarmalar.
+
 ## Veri ve gizlilik
 
 Tüm veriler cihazının `localStorage` alanında durur. Hesap, sunucu ve analitik yoktur.

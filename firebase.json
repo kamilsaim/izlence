@@ -11,7 +11,8 @@
       "README.md",
       "*.jpeg",
       "*.jpg",
-      "bump.mjs"
+      "bump.mjs",
+      "CLAUDE.md"
     ],
     "rewrites": [
       {
