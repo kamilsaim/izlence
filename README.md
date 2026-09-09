@@ -80,7 +80,13 @@ Model bulunamazsa, kota dolarsa veya sunucu hatası gelirse bir alttakine geçer
 
 Uygulama her açılışta ve arka plandan öne geldiğinde sunucudaki sürüm dosyasını okur. Yeni sürüm varsa üstte bir bant çıkar, dokununca tüm önbellek temizlenip uygulama yeniden yüklenir. Ayarlar sekmesinden elle de denetleyebilirsin.
 
-Sürüm numarası üç yerde birlikte yükseltilir: `app.js` içindeki uygulama sabiti, service worker önbellek adı ve `version.json`. Üçü aynı olmazsa güncelleme bandı ya hiç çıkmaz ya da hep açık kalır.
+Sürüm numarası üç yerde birlikte yükseltilir: `app.js` içindeki uygulama sabiti, service worker önbellek adı ve `version.json`. Üçü aynı olmazsa güncelleme bandı ya hiç çıkmaz ya da hep açık kalır. Bunu elle yapma, depodaki betik üçünü birden günceller.
+
+```bash
+node bump.mjs              # yama sürümü
+node bump.mjs minor        # ara sürüm
+node bump.mjs 1.9.3 "not"  # belirli sürüm ve sürüm notu
+```
 
 iOS'ta ana ekrana eklenen sürümde görüntü alanı etiketi kritiktir. `viewport-fit=cover`, `maximum-scale` veya `user-scalable=no` eklemek alt menüyü ekranın altından koparır. Etiket sade tutulmalı, yakınlaştırma engelleme dokunma davranışı ve jest olaylarıyla yapılır.
 
@@ -88,7 +94,7 @@ iOS'ta ana ekrana eklenen sürümde görüntü alanı etiketi kritiktir. `viewpo
 
 Tüm veriler cihazının `localStorage` alanında durur. Hesap, sunucu ve analitik yoktur.
 
-**Ayarlar → JSON dışa aktar** ile yedek al, başka cihazda içe aktar. Yedeğe API anahtarlarını da ekleyen bir seçenek var, varsayılan olarak kapalıdır. Anahtarlı yedek düz metindir, sadece kendi cihazların arasında taşı.
+**Ayarlar → JSON dışa aktar** ile yedek al, başka cihazda içe aktar. Listende on yapımdan fazlası varsa ve otuz gündür yedek almadıysan uygulama seni uyarır. Yedeğe API anahtarlarını da ekleyen bir seçenek var, varsayılan olarak kapalıdır. Anahtarlı yedek düz metindir, sadece kendi cihazların arasında taşı.
 
 IMDb hesabından indirdiğin `ratings.csv` dosyasını **Ayarlar → IMDb puanlarını içe aktar** ile yükleyebilirsin. Puanların ve puanlama tarihlerin taşınır, film ve dizi ikisi de desteklenir.
 

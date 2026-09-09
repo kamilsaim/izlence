@@ -12,7 +12,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 /* uygulama kimligi */
 const APP = {
   name: 'Izlence',
-  version: '1.5.6',
+  version: '1.6.0',
   build: '2026-09-09',
   developer: 'kamilsaim',
   site: 'https://izlence.web.app',
@@ -740,18 +740,43 @@ function provParams() {
   };
 }
 
+/* Saglayici listesi gunde bir tazelenir; her Ayarlar acilisinda TMDB'ye
+   gitmek gereksiz ve kotayi bosa harciyordu. */
+LS.provcache = 'izlence.provcache';
+const PROV_TTL = 24 * 60 * 60 * 1000;
+
+function cachedProviders() {
+  try {
+    const c = JSON.parse(localStorage.getItem(LS.provcache) || 'null');
+    if (c && c.region === region() && Array.isArray(c.list) && c.list.length
+        && Date.now() - c.at < PROV_TTL) return c.list;
+  } catch (e) { /* yoksay */ }
+  return null;
+}
+
+async function fetchProviders() {
+  const hit = cachedProviders();
+  if (hit) return hit;
+  const [mv, tv] = await Promise.all([
+    tmdb('/watch/providers/movie', { watch_region: region() }),
+    tmdb('/watch/providers/tv', { watch_region: region() }).catch(() => ({ results: [] })),
+  ]);
+  const map = new Map();
+  (mv.results || []).concat(tv.results || []).forEach((p) => { if (!map.has(p.provider_id)) map.set(p.provider_id, p); });
+  const list = Array.from(map.values());
+  try {
+    localStorage.setItem(LS.provcache, JSON.stringify({ at: Date.now(), region: region(), list }));
+  } catch (e) { /* kota dolduysa yoksay */ }
+  return list;
+}
+
 async function renderProviderPicker() {
   const box = $('#prov-list');
   if (!box) return;
   if (!getKey()) { box.innerHTML = '<p class="muted small">TMDB anahtarini kaydettikten sonra platform listesi yuklenir.</p>'; return; }
   box.innerHTML = '<p class="muted small">Platformlar yukleniyor...</p>';
   try {
-    const [mv, tv] = await Promise.all([
-      tmdb('/watch/providers/movie', { watch_region: region() }),
-      tmdb('/watch/providers/tv', { watch_region: region() }).catch(() => ({ results: [] })),
-    ]);
-    const map = new Map();
-    (mv.results || []).concat(tv.results || []).forEach((p) => { if (!map.has(p.provider_id)) map.set(p.provider_id, p); });
+    const providers = await fetchProviders();
     const sel = getProviders();
     // Oncelik bolgeye gore degisir; global display_priority Netflix gibi buyuk
     // platformlari listenin disinda birakabiliyordu.
@@ -760,7 +785,7 @@ async function renderProviderPicker() {
       const v = (byRegion === undefined || byRegion === null) ? p.display_priority : byRegion;
       return (v === undefined || v === null) ? 999 : v;
     };
-    const all = Array.from(map.values()).sort((a, b) =>
+    const all = providers.slice().sort((a, b) =>
       prio(a) - prio(b) || String(a.provider_name).localeCompare(String(b.provider_name), 'tr'));
     // Secili platformlar her zaman gorunur kalsin
     const top = all.slice(0, 24);
@@ -1455,9 +1480,10 @@ function init() {
 
   const lang = $('#lang');
   lang.value = getLang();
-  lang.addEventListener('change', () => { localStorage.setItem(LS.lang, lang.value); db.genres = {}; saveDB(); renderProviderPicker(); toast('Dil güncellendi'); });
+  lang.addEventListener('change', () => { localStorage.setItem(LS.lang, lang.value); db.genres = {}; saveDB(); localStorage.removeItem(LS.provcache); renderProviderPicker(); toast('Dil güncellendi'); });
 
   // veri
+  renderBackupStatus();
   const keyBox = $('#export-keys');
   keyBox.checked = localStorage.getItem('izlence.exportkeys') === '1';
   keyBox.addEventListener('change', () => {
@@ -1489,6 +1515,8 @@ function init() {
       ? '⚠️ Yedek indirildi — içinde API anahtarların var, bu dosyayı kimseyle paylaşma.'
       : '✓ Yedek indirildi (anahtarlar dahil edilmedi).';
     toast('Yedek indirildi');
+    localStorage.setItem(LS.lastbackup, String(Date.now()));
+    renderBackupStatus();
   });
   $('#imdb-btn').addEventListener('click', () => $('#imdb-csv').click());
   $('#imdb-csv').addEventListener('change', (ev) => {
@@ -1533,7 +1561,7 @@ function init() {
         let added = 0;
         Object.entries(inc.movies).forEach(([id, m]) => { if (!db.movies[id]) added++; db.movies[id] = m; });
         if (inc.genres) db.genres = Object.assign({}, inc.genres, db.genres);
-        if (inc.aiMemory) { db.aiMemory = inc.aiMemory; localStorage.setItem(LS.memory, inc.aiMemory); }
+        if (inc.aiMemory) { db.aiMemory = trimMemory(inc.aiMemory); localStorage.setItem(LS.memory, db.aiMemory); }
 
         // anahtarlar (yedek anahtarlı alındıysa)
         let keyNote = '';
@@ -1597,6 +1625,7 @@ function init() {
   }
 
   blockZoom();
+  backupReminder();
 
   checkUpdate(false);
   document.addEventListener('visibilitychange', () => {
@@ -1629,6 +1658,48 @@ function blockZoom() {
     lastAt = now; lastX = t.clientX; lastY = t.clientY;
   }, { passive: false });
   document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+}
+
+/* ------------------------------- yedek uyarisi ----------------------------
+   Veriler yalnizca tarayicida duruyor; tarayici verisi temizlenince gidiyor.
+   Otuz gundur yedek alinmadiysa Ayarlar'da uyari, acilista da bir hatirlatma. */
+
+LS.lastbackup = 'izlence.lastbackup';
+const BACKUP_DUE = 30 * 24 * 60 * 60 * 1000;
+
+function backupAge() {
+  const t = parseInt(localStorage.getItem(LS.lastbackup) || '0', 10);
+  return t ? Date.now() - t : null;   // null: hic yedek alinmamis
+}
+
+function backupDue() {
+  if (allItems().length < 10) return false;   // yeni kullanicilari rahatsiz etme
+  const age = backupAge();
+  return age === null || age > BACKUP_DUE;
+}
+
+function renderBackupStatus() {
+  const el = $('#backup-status');
+  if (!el) return;
+  const age = backupAge();
+  const days = age === null ? null : Math.floor(age / 86400000);
+  if (!backupDue()) {
+    el.className = 'status';
+    el.textContent = days === null ? '' : 'Son yedek ' + (days === 0 ? 'bugun alindi.' : days + ' gun once alindi.');
+    return;
+  }
+  el.className = 'status err';
+  el.textContent = days === null
+    ? 'Henuz yedek almadin. Tarayici verisi temizlenirse listelerin siler.'
+    : 'Son yedegin ' + days + ' gunluk. Yeni bir yedek almanin tam zamani.';
+}
+
+function backupReminder() {
+  if (!backupDue()) return;
+  const shown = sessionStorage.getItem('izlence.backupnag');
+  if (shown) return;
+  try { sessionStorage.setItem('izlence.backupnag', '1'); } catch (e) { /* yoksay */ }
+  setTimeout(() => toast('Yedek almayali cok oldu - Ayarlar > JSON disa aktar'), 2500);
 }
 
 /* ------------------------------ surum kontrolu ---------------------------
@@ -1706,6 +1777,17 @@ LS.glast = 'izlence.glastmodel'; // en son başarılı model
 const getGKey = () => (localStorage.getItem(LS.gkey) || '').trim();
 const getGPref = () => localStorage.getItem(LS.gmodel) || 'auto';
 const getMemory = () => localStorage.getItem(LS.memory) || '';
+
+/* Hafiza her istekte modele geri veriliyor; sinirsiz buyurse istem sisip
+   kotayi hizli tuketir. Cumle sinirinda kesip son 1200 karakteri tutuyoruz. */
+const MEMORY_MAX = 1200;
+function trimMemory(text) {
+  const t = String(text || '').trim();
+  if (t.length <= MEMORY_MAX) return t;
+  const cut = t.slice(t.length - MEMORY_MAX);
+  const dot = cut.search(/[.!?]\s/);
+  return (dot > -1 && dot < 200 ? cut.slice(dot + 2) : cut).trim();
+}
 
 /* -------------------- model keşfi: en güncel ücretsiz model ----------------
    Google model adları zamanla değişiyor (2.5 -> 3.0 ...). Sabit isim yazmak
@@ -2033,8 +2115,9 @@ async function runAI() {
     }
 
     if (out.memory) {
-      localStorage.setItem(LS.memory, out.memory);
-      db.aiMemory = out.memory; saveDB();
+      const mem = trimMemory(out.memory);
+      localStorage.setItem(LS.memory, mem);
+      db.aiMemory = mem; saveDB();
       renderMemory();
     }
     localStorage.setItem(LS.airecs, JSON.stringify({ at: Date.now(), ask, items }));

@@ -10,7 +10,8 @@
       ".firebase/**",
       "README.md",
       "*.jpeg",
-      "*.jpg"
+      "*.jpg",
+      "bump.mjs"
     ],
     "rewrites": [
       {
