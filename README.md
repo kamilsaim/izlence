@@ -13,7 +13,6 @@ Tamamen tarayıcıda çalışır. Hesap yok, sunucu yok, takip yok.
 [![PWA](https://img.shields.io/badge/PWA-çevrimdışı%20çalışır-46a171?style=flat-square)](https://izlence.web.app)
 [![TMDB](https://img.shields.io/badge/veri-TMDB-01b4e4?style=flat-square)](https://www.themoviedb.org/)
 [![Gemini](https://img.shields.io/badge/AI-Google%20Gemini-d5803b?style=flat-square)](https://aistudio.google.com/)
-[![Lisans](https://img.shields.io/badge/lisans-MIT-7d7a75?style=flat-square)](#lisans)
 
 </div>
 
@@ -84,10 +83,6 @@ Tüm veriler cihazının `localStorage` alanında durur. Hesap, sunucu ve analit
 IMDb hesabından indirdiğin `ratings.csv` dosyasını **Ayarlar → IMDb puanlarını içe aktar** ile yükleyebilirsin. Puanların ve puanlama tarihlerin taşınır, film ve dizi ikisi de desteklenir.
 
 Tarayıcı verisini temizlersen listeler silinir. Düzenli yedek al.
-
-## Lisans
-
-MIT.
 
 ---
 
