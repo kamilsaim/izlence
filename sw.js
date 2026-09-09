@@ -1,5 +1,5 @@
 /* İzlence service worker — uygulama kabuğu çevrimdışı, TMDB istekleri ağ-önce */
-const VERSION = 'izlence-v1.6.2';
+const VERSION = 'izlence-v1.6.3';
 const SHELL = [
   './',
   './index.html',
