@@ -158,6 +158,10 @@ main{max-width:1120px;margin:0 auto;padding:16px 16px 32px}
 .empty-emoji{font-size:40px;margin-bottom:12px}
 .empty p{color:var(--text2);font-size:14.5px;margin:8px 0 20px}
 
+/* ---------- guncelleme banti ---------- */
+.update-bar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;background:var(--accent-soft);border-bottom:1px solid var(--border);font-size:14px;font-weight:550}
+.update-bar[hidden]{display:none !important}
+
 /* ---------- tabbar ---------- */
 .tabbar{flex:0 0 auto;z-index:50;height:calc(var(--tabbar-h) + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom);display:flex;background:color-mix(in srgb,var(--canvas) 92%,transparent);backdrop-filter:saturate(180%) blur(12px);border-top:1px solid var(--border)}
 .tab{flex:1;min-height:44px;border:0;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--text2);font-size:11px;font-weight:550;cursor:pointer}

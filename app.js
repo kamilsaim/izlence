@@ -12,7 +12,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 /* uygulama kimligi */
 const APP = {
   name: 'Izlence',
-  version: '1.4.0',
+  version: '1.5.0',
   build: '2026-09-09',
   developer: 'kamilsaim',
   site: 'https://izlence.web.app',
@@ -1573,8 +1573,95 @@ function init() {
   if (getKey()) $('#search-empty').querySelector('.btn').hidden = true;
 
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        swReg = reg;
+        // yeni surum indi ve beklemede -> bandi goster
+        if (reg.waiting) showUpdateBar();
+        reg.addEventListener('updatefound', () => {
+          const sw = reg.installing;
+          if (!sw) return;
+          sw.addEventListener('statechange', () => {
+            if (sw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBar();
+          });
+        });
+      }).catch(() => {});
+    });
+    // yeni service worker devraldiginda tek sefer yenile
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
   }
+
+  checkUpdate(false);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkUpdate(false);
+  });
+  const upBtn = $('#update-now');
+  if (upBtn) upBtn.addEventListener('click', applyUpdate);
+  const chk = $('#check-update');
+  if (chk) chk.addEventListener('click', () => checkUpdate(true));
+}
+
+/* ------------------------------ surum kontrolu ---------------------------
+   iOS'ta ana ekrana eklenen PWA eski kabuga takilabiliyor. Uygulama acildikca
+   (ve one geldikce) sunucudaki version.json okunur; surum farkliysa ust bantta
+   guncelleme cikar, kullanici dokununca tum onbellek temizlenip yeniden yuklenir.
+   -------------------------------------------------------------------------- */
+
+let swReg = null;
+let lastCheck = 0;
+const CHECK_TTL = 30 * 60 * 1000; // en fazla yarim saatte bir
+
+function showUpdateBar(remote) {
+  const bar = $('#update-bar');
+  if (!bar) return;
+  const t = $('#update-text');
+  if (t) t.textContent = remote
+    ? 'Yeni surum hazir: v' + remote + ' (senin surumun v' + APP.version + ')'
+    : 'Yeni surum hazir.';
+  bar.hidden = false;
+}
+
+async function checkUpdate(manual) {
+  const st = $('#update-status');
+  if (!manual && Date.now() - lastCheck < CHECK_TTL) return;
+  lastCheck = Date.now();
+  if (manual && st) { st.className = 'status'; st.textContent = 'Kontrol ediliyor...'; }
+  if (swReg) swReg.update().catch(() => {});
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(String(r.status));
+    const d = await r.json();
+    const remote = String(d.version || '').trim();
+    if (remote && remote !== APP.version) {
+      showUpdateBar(remote);
+      if (manual && st) { st.className = 'status'; st.textContent = 'Yeni surum var: v' + remote; }
+    } else if (manual && st) {
+      st.className = 'status ok'; st.textContent = 'Guncelsin (v' + APP.version + ').';
+    }
+  } catch (e) {
+    if (manual && st) { st.className = 'status err'; st.textContent = 'Surum bilgisi alinamadi. Baglantini kontrol et.'; }
+  }
+}
+
+async function applyUpdate() {
+  const btn = $('#update-now');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guncelleniyor...'; }
+  try {
+    if (swReg && swReg.waiting) swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+    const regs = navigator.serviceWorker ? await navigator.serviceWorker.getRegistrations() : [];
+    await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
+  } catch (e) { /* yoksay */ }
+  // onbellegi atlayarak yeniden yukle
+  location.replace(location.pathname + '?v=' + Date.now());
 }
 
 document.addEventListener('DOMContentLoaded', init);
