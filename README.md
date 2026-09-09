@@ -64,13 +64,15 @@ Zevk profilin metne çevrilip modele gönderilir. Model yapılandırılmış JSO
 **Model seçimi otomatik ve yetenek öncelikli.** Model adı koda sabitlenmez. Uygulama Google'ın model listesini çekip anahtarının erişebildiği modelleri sıralar: önce en yeni sürüm, aynı sürüm içinde en güçlü kademe. Zincir şöyle oluşur.
 
 ```
+gemini-3.8-pro
+gemini-3.8-flash
 gemini-3-pro-preview
-gemini-3-flash-preview
 gemini-2.5-pro
 gemini-2.5-flash
-gemini-2.5-flash-lite
 gemini-2.0-flash
 ```
+
+Bu liste yalnızca örnektir ve koda sabitlenmiş değildir. Google yeni bir sürüm çıkardığında uygulama onu kendiliğinden en üste alır; kod güncellemesi gerekmez.
 
 Model bulunamazsa, kota dolarsa veya sunucu hatası gelirse bir alttakine geçer, en fazla sekiz deneme yapar. Anahtar hatasında denemeye devam etmez, doğrudan uyarır. Liste on iki saatte bir tazelenir. İstersen Ayarlar'dan tek bir modeli sabitleyebilirsin.
 

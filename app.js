@@ -12,7 +12,7 @@ const TMDB = 'https://api.themoviedb.org/3';
 /* uygulama kimligi */
 const APP = {
   name: 'Izlence',
-  version: '1.5.1',
+  version: '1.5.2',
   build: '2026-09-09',
   developer: 'kamilsaim',
   site: 'https://izlence.web.app',
@@ -1721,6 +1721,8 @@ function prettyModel(id) {
 
 // güvenlik ağı: liste çekilemezse bunları sırayla dene
 const FALLBACK_MODELS = [
+  'gemini-3.8-pro',
+  'gemini-3.8-flash',
   'gemini-3-pro-preview',
   'gemini-2.5-pro',
   'gemini-3-flash-preview',
