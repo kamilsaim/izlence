@@ -76,6 +76,14 @@ Bu liste yalnızca örnektir ve koda sabitlenmiş değildir. Google yeni bir sü
 
 Model bulunamazsa, kota dolarsa veya sunucu hatası gelirse bir alttakine geçer, en fazla sekiz deneme yapar. Anahtar hatasında denemeye devam etmez, doğrudan uyarır. Liste on iki saatte bir tazelenir. İstersen Ayarlar'dan tek bir modeli sabitleyebilirsin.
 
+## Sürüm ve güncelleme
+
+Uygulama her açılışta ve arka plandan öne geldiğinde sunucudaki sürüm dosyasını okur. Yeni sürüm varsa üstte bir bant çıkar, dokununca tüm önbellek temizlenip uygulama yeniden yüklenir. Ayarlar sekmesinden elle de denetleyebilirsin.
+
+Sürüm numarası üç yerde birlikte yükseltilir: `app.js` içindeki uygulama sabiti, service worker önbellek adı ve `version.json`. Üçü aynı olmazsa güncelleme bandı ya hiç çıkmaz ya da hep açık kalır.
+
+iOS'ta ana ekrana eklenen sürümde görüntü alanı etiketi kritiktir. `viewport-fit=cover`, `maximum-scale` veya `user-scalable=no` eklemek alt menüyü ekranın altından koparır. Etiket sade tutulmalı, yakınlaştırma engelleme dokunma davranışı ve jest olaylarıyla yapılır.
+
 ## Veri ve gizlilik
 
 Tüm veriler cihazının `localStorage` alanında durur. Hesap, sunucu ve analitik yoktur.
