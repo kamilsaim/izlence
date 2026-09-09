@@ -41,45 +41,6 @@ Telefonda adresi aç, tarayıcı menüsünden **Ana ekrana ekle** de. Uygulama g
 
 Anahtarlar yalnızca senin cihazında `localStorage` içinde durur. Depoda hiçbir anahtar yoktur, bu yüzden statik yayın güvenlidir.
 
-## Yerelde çalıştır
-
-Service worker `file://` üzerinden çalışmaz, küçük bir sunucu gerekir.
-
-```bash
-git clone https://github.com/kamilsaim/izlence.git
-cd izlence
-python -m http.server 8080
-# http://localhost:8080
-```
-
-## Yayınlama
-
-Firebase Hosting üzerinde yayında. Depodaki `firebase.json` hazır gelir: SPA yönlendirmesi, `sw.js` için no-cache, görseller için uzun cache.
-
-```bash
-npm i -g firebase-tools
-firebase login
-firebase deploy --only hosting:izlence
-```
-
-Yeni sürüm yayınlandığında kullanıcıların uygulamayı bir kez kapatıp açması yeterlidir. Service worker önbellek adı sürüm numarasını taşır, eski kabuk otomatik temizlenir.
-
-Depoda GitHub Pages iş akışı da duruyor. `main` dalına gönderim yapınca Pages sürümünü günceller. Firebase'i güncellemez, onu ayrıca dağıtman gerekir.
-
-## Dosya yapısı
-
-```
-index.html              Ekranlar: Keşfet, Listelerim, Öneriler, AI, Analiz, Ayarlar
-styles.css              Mobil öncelikli tasarım, otomatik koyu tema
-app.js                  TMDB istemcisi, liste mantığı, öneri motoru, Gemini entegrasyonu, analiz
-sw.js                   Service worker: çevrimdışı kabuk ve afiş önbelleği
-manifest.webmanifest    PWA manifesti
-icons/                  Uygulama ikonları ve logo
-firebase.json           Firebase Hosting yapılandırması
-```
-
-Derleme adımı, paket yöneticisi ve bağımlılık yoktur. Dosyaları sunmak yeterlidir.
-
 ## Öneri motoru
 
 Her filme zevk profilinde bir ağırlık verilir.
