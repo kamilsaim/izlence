@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>İzlence — Film Günlüğü</title>
+<meta name="description" content="Film takip, öneri ve analiz uygulaması. TMDB destekli, çevrimdışı çalışan PWA." />
+<meta name="theme-color" content="#191919" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <img class="brand-mark" src="icons/mark.png" alt="" width="30" height="21" />
+      <span>İzlence</span>
+    </div>
+    <button id="btn-settings" class="icon-btn" aria-label="Ayarlar" title="Ayarlar">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.8-1.4-2-3.4-2.1.9a7.6 7.6 0 0 0-2.6-1.5L14.2 2H9.8l-.3 2.3a7.6 7.6 0 0 0-2.6 1.5l-2.1-.9-2 3.4 1.8 1.4a7.6 7.6 0 0 0 0 3L2.8 14.2l2 3.4 2.1-.9a7.6 7.6 0 0 0 2.6 1.5l.3 2.3h4.4l.3-2.3a7.6 7.6 0 0 0 2.6-1.5l2.1.9 2-3.4-1.8-1.4Z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ============ KEŞFET ============ -->
+  <section class="view" id="view-search">
+    <div class="search-wrap">
+      <div class="search-field">
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+        <input id="q" type="search" placeholder="Film, kişi, yıl veya IMDb kodu…" autocomplete="off" aria-label="Film ara" />
+        <button id="q-clear" class="clear-btn" aria-label="Temizle" hidden>&times;</button>
+      </div>
+    </div>
+    <div id="search-status" class="status"></div>
+    <div id="search-results" class="grid"></div>
+    <div id="search-empty" class="empty">
+      <div class="empty-emoji">🎬</div>
+      <h2>Film aramaya başla</h2>
+      <p>Bulduğun filmleri <b>İzledim</b>, <b>Favori</b> veya <b>İzleyeceğim</b> listene ekle. Öneri motoru ve analizler bu listelerden beslenir.</p>
+      <p class="muted">Bulamazsan orijinal adını, yılını (<code>Dune 2021</code>), IMDb kodunu (<code>tt1375666</code>) veya yönetmen adını yazabilirsin.</p>
+      <button class="btn btn-primary" data-go="settings">TMDB anahtarını gir</button>
+    </div>
+  </section>
+
+  <!-- ============ LİSTELERİM ============ -->
+  <section class="view" id="view-library" hidden>
+    <div class="seg" role="tablist" aria-label="Listeler">
+      <button class="seg-btn is-active" data-list="watched" role="tab">İzlediklerim <span class="count" id="c-watched">0</span></button>
+      <button class="seg-btn" data-list="favorite" role="tab">Favoriler <span class="count" id="c-favorite">0</span></button>
+      <button class="seg-btn" data-list="watchlist" role="tab">İzleyeceklerim <span class="count" id="c-watchlist">0</span></button>
+      <button class="seg-btn" data-list="series" role="tab">Serilerim <span class="count" id="c-series">0</span></button>
+    </div>
+    <div class="toolbar">
+      <input id="lib-filter" type="search" class="mini-input" placeholder="Listede ara…" aria-label="Listede ara" />
+      <select id="lib-sort" class="mini-input" aria-label="Sırala">
+        <option value="added">Eklenme tarihi</option>
+        <option value="myRating">Puanım</option>
+        <option value="title">İsim (A-Z)</option>
+        <option value="year">Yıl</option>
+      </select>
+    </div>
+    <label class="check" id="lib-series-wrap">
+      <input type="checkbox" id="lib-series" />
+      <span>Sadece bir seriye ait yapımları göster</span>
+    </label>
+    <div id="ser-tools" hidden>
+      <label class="check">
+        <input type="checkbox" id="ser-gaps" />
+        <span>Sadece <b>izlemediklerimi</b> göster (eksiği olan seriler)</span>
+      </label>
+      <div class="chip-row">
+        <button class="btn btn-mini" id="ser-scan">Serileri tara</button>
+        <button class="btn btn-mini" id="ser-rescan">Bakiye tara (hepsi)</button>
+      </div>
+      <p class="status" id="ser-status"></p>
+    </div>
+    <div id="library-results" class="grid"></div>
+    <div id="library-empty" class="empty">
+      <div class="empty-emoji">📚</div>
+      <h2>Bu liste henüz boş</h2>
+      <p>Keşfet sekmesinden film arayıp ekleyebilirsin.</p>
+      <button class="btn btn-primary" data-go="search">Film ara</button>
+    </div>
+  </section>
+
+  <!-- ============ ÖNERİLER ============ -->
+  <section class="view" id="view-recs" hidden>
+    <div class="section-head">
+      <div>
+        <h1>Sana özel öneriler</h1>
+        <p class="sub" id="rec-basis">Listelerinden öğrenilen zevk profiline göre sıralandı.</p>
+      </div>
+      <button id="rec-refresh" class="btn btn-ghost">Yenile</button>
+    </div>
+    <div id="taste-chips" class="chips"></div>
+    <div id="rec-status" class="status"></div>
+    <div id="rec-results" class="grid"></div>
+    <div id="rec-empty" class="empty">
+      <div class="empty-emoji">✨</div>
+      <h2>Önce birkaç film ekle</h2>
+      <p>En az 3 film eklediğinde öneri motoru anlamlı sonuç üretmeye başlar.</p>
+      <button class="btn btn-primary" data-go="search">Film ara</button>
+    </div>
+  </section>
+
+  <!-- ============ AI ÖNERİLERİ ============ -->
+  <section class="view" id="view-ai" hidden>
+    <div class="section-head">
+      <div>
+        <h1>AI önerileri</h1>
+        <p class="sub">Google Gemini, zevk profilini ve hafızasını okuyup gerekçeli öneri yapar.</p>
+      </div>
+    </div>
+
+    <div class="ask">
+      <textarea id="ai-prompt" class="input" rows="2" placeholder="İstersen bir istek yaz: “bu akşam kısa ve hafif bir şey”, “Interstellar gibi ama daha yavaş”…"></textarea>
+      <button id="ai-run" class="btn btn-primary">✨ Öneri iste</button>
+    </div>
+
+    <div id="ai-status" class="status"></div>
+    <div id="ai-results" class="ai-list"></div>
+
+    <details id="ai-memory-box" class="card" hidden>
+      <summary><b>AI hafızası</b> — uygulamanın senin hakkında öğrendikleri</summary>
+      <p id="ai-memory-text" class="muted" style="margin-top:10px"></p>
+      <button id="ai-memory-clear" class="btn btn-danger" style="margin-top:12px">Hafızayı sıfırla</button>
+    </details>
+
+    <div id="ai-empty" class="empty">
+      <div class="empty-emoji">🧠</div>
+      <h2>AI önerilerini aç</h2>
+      <p>Ücretsiz bir Google AI Studio anahtarı gir, en az 3 film ekle. Gemini zevkini yorumlayıp neden önerdiğini de yazar.</p>
+      <button class="btn btn-primary" data-go="settings">Google AI anahtarı ekle</button>
+    </div>
+  </section>
+
+  <!-- ============ ANALİZ ============ -->
+  <section class="view" id="view-stats" hidden>
+    <div class="section-head"><div><h1>Analiz</h1><p class="sub">İzleme alışkanlıklarının özeti.</p></div></div>
+    <div id="stats-body"></div>
+    <div id="stats-empty" class="empty">
+      <div class="empty-emoji">📊</div>
+      <h2>Analiz için veri yok</h2>
+      <p>Birkaç film ekledikten sonra tür, yıl, süre ve puan dağılımların burada belirir.</p>
+      <button class="btn btn-primary" data-go="search">Film ara</button>
+    </div>
+  </section>
+
+  <!-- ============ AYARLAR ============ -->
+  <section class="view" id="view-settings" hidden>
+    <div class="section-head"><div><h1>Ayarlar</h1><p class="sub">Anahtar ve veri yönetimi.</p></div></div>
+
+    <div class="card">
+      <h3>TMDB API anahtarı</h3>
+      <p class="muted">themoviedb.org &rarr; Settings &rarr; API bölümünden ücretsiz alınır. Anahtar yalnızca bu cihazda (localStorage) saklanır, hiçbir sunucuya gönderilmez.</p>
+      <div class="row">
+        <input id="apikey" class="input" type="password" placeholder="v3 API Key veya v4 Read Access Token" autocomplete="off" />
+        <button id="apikey-save" class="btn btn-primary">Kaydet</button>
+      </div>
+      <div id="apikey-status" class="status"></div>
+      <details class="guide">
+        <summary>TMDB anahtarı nasıl alınır? (formu hazır doldurduk)</summary>
+        <ol class="guide-steps">
+          <li><a href="https://www.themoviedb.org/signup" target="_blank" rel="noopener">themoviedb.org</a> üzerinden ücretsiz hesap aç ve e-postanı doğrula.</li>
+          <li><a href="https://www.themoviedb.org/settings/api/request" target="_blank" rel="noopener">Ayarlar → API → Create</a> sayfasında <b>Developer</b> seçeneğini seç, sözleşmeyi kabul et.</li>
+          <li>Açılan formu aşağıdaki değerlerle doldur — her satırı tek dokunuşla kopyalayabilirsin.</li>
+          <li>Kaydettikten sonra <b>API Key (v3 auth)</b> değerini kopyalayıp yukarıdaki kutuya yapıştır.</li>
+        </ol>
+        <div class="copy-row">
+          <div class="copy-label">Type of Use <span class="muted">— kişisel / ticari değil</span></div>
+          <div class="copy-box">
+            <code class="copy-val">Personal</code>
+            <button class="btn btn-mini copy-btn" data-copy="Personal">Kopyala</button>
+          </div>
+        </div>
+        <div class="copy-row">
+          <div class="copy-label">Application Name</div>
+          <div class="copy-box">
+            <code class="copy-val">İzlence</code>
+            <button class="btn btn-mini copy-btn" data-copy="İzlence">Kopyala</button>
+          </div>
+        </div>
+        <div class="copy-row">
+          <div class="copy-label">Application URL</div>
+          <div class="copy-box">
+            <code class="copy-val">https://izlence.web.app</code>
+            <button class="btn btn-mini copy-btn" data-copy="https://izlence.web.app">Kopyala</button>
+          </div>
+        </div>
+        <div class="copy-row">
+          <div class="copy-label">Application Summary <span class="muted">— İngilizce istiyor, en az 4 cümle</span></div>
+          <div class="copy-box">
+            <code class="copy-val">Izlence is a personal movie diary and recommendation web app. Users mark films they have watched, rate them and keep private notes. The app analyses this history by genre, director and decade, then suggests new films to watch. The TMDB API is used only to search titles and display posters, overviews and credits. It is a free, non-commercial hobby project with no advertising, and all user data stays in the browser's local storage.</code>
+            <button class="btn btn-mini copy-btn" data-copy="Izlence is a personal movie diary and recommendation web app. Users mark films they have watched, rate them and keep private notes. The app analyses this history by genre, director and decade, then suggests new films to watch. The TMDB API is used only to search titles and display posters, overviews and credits. It is a free, non-commercial hobby project with no advertising, and all user data stays in the browser's local storage.">Kopyala</button>
+          </div>
+        </div>
+        <p class="muted small">Türkçe karşılığı: İzlence, kişisel bir film günlüğü ve öneri uygulamasıdır. Kullanıcı izlediği filmleri işaretler, puanlar ve not alır; uygulama bu geçmişe bakarak tür, yönetmen ve dönem analizleri üretir ve yeni film önerir. TMDB API'si yalnızca film arama, afiş, özet ve kredi bilgilerini göstermek için kullanılır. Ticari kullanım yoktur, reklam gösterilmez ve veriler kullanıcının kendi tarayıcısında saklanır.</p>
+        <p class="muted small">Adres/telefon alanları zorunlu görünür; kendi bilgilerini yaz. TMDB bu bilgileri yayınlamaz. Onay genelde anındadır.</p>
+      </details>
+    </div>
+
+    <div class="card">
+      <h3>Google AI (Gemini) anahtarı — isteğe bağlı</h3>
+      <p class="muted"><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com</a> &rarr; Get API key. Ücretsiz katman kişisel kullanım için yeterlidir. Anahtar yalnızca bu cihazda saklanır; olmazsa uygulama klasik öneri motoruyla çalışmaya devam eder.</p>
+      <div class="row">
+        <input id="gkey" class="input" type="password" placeholder="AIza…" autocomplete="off" />
+        <button id="gkey-save" class="btn btn-primary">Kaydet</button>
+      </div>
+      <div class="row">
+        <select id="gmodel" class="input" aria-label="Gemini modeli">
+          <option value="auto">Otomatik — en güçlü model, hata olursa alta iner</option>
+        </select>
+      </div>
+      <div id="gkey-status" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h3>Dil ve bölge</h3>
+      <div class="row">
+        <select id="lang" class="input">
+          <option value="tr-TR">Türkçe (tr-TR)</option>
+          <option value="en-US">English (en-US)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>İzleme platformlarım</h3>
+      <p class="muted">Seçtiğin platformları işaretle; Öneriler sekmesi sadece bunlarda izlenebilen film ve dizileri getirir. Boş bırakırsan filtre uygulanmaz.</p>
+      <div id="prov-list" class="prov-grid"></div>
+      <div class="row wrap">
+        <button id="prov-clear" class="btn btn-mini">Seçimi temizle</button>
+      </div>
+      <div id="prov-status" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h3>IMDb puanlarını içe aktar</h3>
+      <p class="muted">IMDb → hesabın → <b>Your Ratings</b> → sağ üstteki <b>Export</b> ile inen <code>ratings.csv</code> dosyasını seç. Tüm puanların İzlediklerim listesine taşınır; yüzlerce yapım tek seferde gelir.</p>
+      <div class="row wrap">
+        <button id="imdb-btn" class="btn btn-primary">ratings.csv seç</button>
+        <input id="imdb-csv" type="file" accept=".csv,text/csv" hidden />
+      </div>
+      <div id="imdb-status" class="status"></div>
+      <p class="muted small">TMDB kotasını zorlamamak için satırlar tek tek eşlenir; 500 satır yaklaşık 1 dakika sürer. Sekmeyi açık bırak.</p>
+    </div>
+
+    <div class="card">
+      <h3>Veri yedekleme</h3>
+      <p class="muted">Tüm listelerin, puanların, notların ve dizi ilerlemen tek bir JSON dosyasında.</p>
+      <label class="check">
+        <input id="export-keys" type="checkbox" />
+        <span>Anahtarları da yedeğe ekle <span class="muted">— yeni cihazda tekrar kopyalamana gerek kalmaz</span></span>
+      </label>
+      <p id="keys-warn" class="status err" hidden>⚠️ Bu dosyada TMDB ve Google AI anahtarların açık metin olarak durur. Sadece kendi cihazların arasında taşı, kimseye gönderme.</p>
+      <div class="row wrap">
+        <button id="export" class="btn">JSON dışa aktar</button>
+        <button id="import-btn" class="btn">JSON içe aktar</button>
+        <input id="import" type="file" accept="application/json" hidden />
+        <button id="wipe" class="btn btn-danger">Tüm veriyi sil</button>
+      </div>
+      <div id="data-status" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h3>Uygulama</h3>
+      <div class="kv"><span>Uygulama</span><b>İzlence</b></div>
+      <div class="kv"><span>Sürüm</span><b id="app-version">—</b></div>
+      <div class="kv"><span>Yapı tarihi</span><b id="app-build">—</b></div>
+      <div class="kv"><span>Geliştirici</span><b id="app-dev">kamilsaim</b></div>
+      <div class="kv"><span>Adres</span><b><a href="https://izlence.web.app" target="_blank" rel="noopener">izlence.web.app</a></b></div>
+      <p class="muted small">Çevrimdışı destekli PWA · Tüm veriler yalnızca kendi cihazında saklanır. Film ve dizi verileri TMDB API'sinden gelir; bu uygulama TMDB tarafından onaylanmamış, bağımsız bir projedir.</p>
+      <button id="install" class="btn btn-primary" hidden>Ana ekrana ekle</button>
+    </div>
+  </section>
+</main>
+
+<nav class="tabbar" role="tablist">
+  <button class="tab is-active" data-view="search">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg><span>Keşfet</span></button>
+  <button class="tab" data-view="library">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h5v14H4zM10.5 5h4v14h-4zM16.2 5.6l3.6 1-3.4 12.8-3.6-1z"/></svg><span>Listelerim</span></button>
+  <button class="tab" data-view="recs">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.3 5.2 5.7.5-4.3 3.8 1.3 5.5L12 15.1 7 18l1.3-5.5L4 8.7l5.7-.5z"/></svg><span>Öneriler</span></button>
+  <button class="tab" data-view="ai">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6 13.7 7l4.4 1.7-4.4 1.7L12 14.8 10.3 10.4 5.9 8.7l4.4-1.7zM18.5 14l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9zM6 15l.7 1.8 1.8.7-1.8.7L6 20l-.7-1.8-1.8-.7 1.8-.7z"/></svg><span>AI</span></button>
+  <button class="tab" data-view="stats">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="12" width="4" height="8" rx="1"/><rect x="10" y="7" width="4" height="13" rx="1"/><rect x="16" y="4" width="4" height="16" rx="1"/></svg><span>Analiz</span></button>
+</nav>
+
+<!-- Film detay sayfası -->
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Film detayı">
+    <button class="sheet-close" data-close aria-label="Kapat">&times;</button>
+    <div id="sheet-body"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
