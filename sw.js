@@ -1,5 +1,5 @@
 /* İzlence service worker — uygulama kabuğu çevrimdışı, TMDB istekleri ağ-önce */
-const VERSION = 'izlence-v1.7.1';
+const VERSION = 'izlence-v1.8.0';
 const SHELL = [
   './',
   './index.html',
@@ -12,7 +12,7 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then((c) => Promise.all(SHELL.map((u) => c.add(new Request(u, { cache: 'reload' }))))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('message', (e) => {

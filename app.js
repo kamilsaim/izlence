@@ -12,15 +12,16 @@ const TMDB = 'https://api.themoviedb.org/3';
 /* uygulama kimligi */
 const APP = {
   name: 'Izlence',
-  version: '1.7.1',
-  build: '2026-09-09',
+  version: '1.8.0',
+  build: '2026-09-11',
   developer: 'kamilsaim',
   site: 'https://izlence.web.app',
 };
 
 /* ---------------------------------- state -------------------------------- */
 
-const DEFAULT_DB = { version: 1, movies: {}, genres: {}, collections: {}, updatedAt: null };
+// dismissed: "artık önerme" denilen yapım anahtarları (öneri motoru bunları atlar)
+const DEFAULT_DB = { version: 1, movies: {}, genres: {}, collections: {}, dismissed: [], updatedAt: null };
 
 LS.providers = 'izlence.providers';   // secili yayin platformlari
 
@@ -35,6 +36,7 @@ function loadDB() {
 }
 let db = loadDB();
 if (!db.collections) db.collections = {}; // eski yedeklerde bu alan yok
+if (!Array.isArray(db.dismissed)) db.dismissed = [];
 
 /* v1.7.1 goc: eski kayitlardaki `overview` ve uzun `cast` alanlarini at.
    Ikisi de TMDB'den yeniden gelebiliyor; kayit basina ~%40 yer aciyor. */
@@ -298,6 +300,9 @@ function cardHTML(m) {
     <div class="poster" role="button" tabindex="0" data-id="${k}" aria-label="${esc(m.title)} detayı">
       ${posterHTML(m)}<div class="badges">${badges.join('')}</div>${score}
       ${quickHTML(m)}
+      <button class="dismiss-btn" data-dismiss="${k}" title="Artık önerme" aria-label="${esc(m.title)} artık önerilmesin">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
     </div>
     <div class="card-text" role="button" tabindex="-1" data-id="${k}">
       <div class="card-title">${esc(m.title)}</div>
@@ -359,10 +364,13 @@ async function searchByImdb(id) {
 async function searchTitles(text, opts) {
   const o = opts || {};
   const page = o.page || 1;
-  if (o.year) {
+  // tip seçiliyse (film/dizi) yalnızca o uç çağrılır; hatası yutulmaz ki anahtar hatası "bulunamadı"ya dönmesin
+  if (o.year || o.type) {
+    const want = (t) => !o.type || o.type === t;
+    const call = (path, params) => (o.type ? tmdb(path, params) : tmdb(path, params).catch(() => ({})));
     const [mv, tv] = await Promise.all([
-      tmdb('/search/movie', { query: text, include_adult: 'false', primary_release_year: o.year, language: o.language, page }).catch(() => ({})),
-      tmdb('/search/tv', { query: text, include_adult: 'false', first_air_date_year: o.year, language: o.language, page }).catch(() => ({})),
+      want('movie') ? call('/search/movie', { query: text, include_adult: 'false', primary_release_year: o.year, language: o.language, page }) : {},
+      want('tv') ? call('/search/tv', { query: text, include_adult: 'false', first_air_date_year: o.year, language: o.language, page }) : {},
     ]);
     const items = (mv.results || []).map((x) => norm(x, 'movie'))
       .concat((tv.results || []).map((x) => norm(x, 'tv')))
@@ -494,9 +502,17 @@ const localMore = (all, shown, step) => {
 
 const PERSON_STEP = 40;
 
+/* Keşfet'teki Tümü / Film / Dizi süzgeci. Başlık aramasında doğrudan ilgili
+   TMDB ucuna gidilir; kişi, seri, konu ve trend sonuçlarında ise ızgara CSS ile
+   süzülür (#search-results[data-type]). */
+LS.stype = 'izlence.stype';
+let searchType = localStorage.getItem(LS.stype) || '';
+
 function countMsg(items) {
   const f = items.filter((m) => m.mtype !== 'tv').length;
   const t = items.length - f;
+  if (searchType === 'movie') return f + ' film';
+  if (searchType === 'tv') return t + ' dizi';
   if (f && t) return f + ' film · ' + t + ' dizi';
   if (t) return t + ' dizi';
   return f + ' film';
@@ -549,7 +565,7 @@ const runSearch = debounce(async (raw) => {
 
     // sayfalanabilir baslik aramasi: hasMore bayragini filtreden sonra da korur
     const titles = async (opts) => {
-      const r = await searchTitles(p.text, opts);
+      const r = await searchTitles(p.text, Object.assign({ type: searchType }, opts));
       const out = r.filter((m) => m.title);
       out.hasMore = r.hasMore;
       return out;
@@ -774,6 +790,23 @@ function pushRecSeen(ids) {
   localStorage.setItem(LS.recseen, JSON.stringify(merged));
 }
 
+/* "Artık önerme": anahtar db.dismissed'a yazılır (yedeğe de girer), kart
+   ızgaradan kalkar. Geri alma notu öneri başlığının altında durur. */
+function dismissRec(id) {
+  if (db.dismissed.indexOf(id) === -1) db.dismissed.push(id);
+  saveDB();
+  $$('#rec-results [data-card="' + id + '"]').forEach((el) => el.remove());
+  renderDismissNote();
+  toast('Bir daha önerilmeyecek');
+}
+function renderDismissNote() {
+  const el = $('#rec-dismissed');
+  if (!el) return;
+  const n = db.dismissed.length;
+  el.hidden = !n;
+  if (n) el.innerHTML = n + ' yapım gizlendi · <button class="link-btn" id="rec-undismiss" type="button">Sıfırla</button>';
+}
+
 async function buildRecs() {
   const status = $('#rec-status'), grid = $('#rec-results'), empty = $('#rec-empty'), chips = $('#taste-chips');
   const seeds = allItems();
@@ -839,10 +872,12 @@ async function buildRecs() {
 
     // 3) Skorlama
     const scores = new Map();
+    const dismissed = new Set(db.dismissed);
     pools.flat().forEach(({ x, src }) => {
       if (!x || !x.title) return;
       const id = keyOf(x);
       if (db.movies[id]) return; // zaten listede
+      if (dismissed.has(id)) return; // "artık önerme" denildi
       const prev = scores.get(id) || { movie: x, score: 0, hits: 0, why: new Set() };
       let s = 12; // benzer film havuzunda görülme taban puanı
       (x.genre_ids || []).forEach((g) => {
@@ -867,7 +902,7 @@ async function buildRecs() {
       .sort((a, b) => b.score - a.score)
       .slice(0, 24);
 
-    if (!recs.length) { status.textContent = 'Yeni öneri bulunamadı. Birkaç film daha ekleyip tekrar dene.'; grid.innerHTML = ''; return; }
+    if (!recs.length) { status.textContent = 'Yeni öneri bulunamadı. Birkaç film daha ekleyip tekrar dene.'; grid.innerHTML = ''; renderDismissNote(); return; }
 
     const fresh = recs.filter((r) => !seenBefore.has(keyOf(r.movie))).length;
     status.textContent = recs.length + ' öneri · ' + fresh + ' tanesi yeni · ' + (round + 1) + '. tur'
@@ -876,6 +911,7 @@ async function buildRecs() {
     $('#rec-basis').textContent = seeds.length + ' yapımlık listenden çıkarılan tür, yönetmen ve dönem tercihlerine göre.'
       + (getProviders().length ? ' Yalnızca seçtiğin ' + getProviders().length + ' platformda izlenebilenler.' : '');
     renderGrid(grid, recs.map((r) => r.movie));
+    renderDismissNote();
   } catch (err) {
     grid.innerHTML = '';
     status.className = 'status err';
@@ -1286,8 +1322,9 @@ async function scanSeries(rescan) {
   }
 }
 
-async function openMovie(id) {
+async function openMovie(id, fromPop) {
   const sheet = $('#sheet'), body = $('#sheet-body');
+  if (!fromPop) pushNav({ nav: 'sheet', id: String(id) });
   openId = String(id);
   const base = detailView(id, cacheMovies.get(String(id))) || cacheMovies.get(String(id)) || { id };
   sheet.hidden = false;
@@ -1458,7 +1495,8 @@ function wireDetail(movie) {
   if (note) note.addEventListener('change', () => { upsert(movie, { note: note.value }); toast('Not kaydedildi'); });
 }
 
-function closeSheet() {
+function closeSheet(fromPop) {
+  if (!fromPop && openId && history.state && history.state.nav === 'sheet') { history.back(); return; }
   openId = null;
   $('#sheet').hidden = true;
   document.body.style.overflow = '';
@@ -1552,7 +1590,8 @@ async function importImdbCsv(file) {
 /* -------------------------------- routing -------------------------------- */
 
 let activeView = 'search';
-function go(view) {
+function go(view, fromPop) {
+  if (!fromPop && view !== activeView) pushNav({ nav: 'view', view });
   activeView = view;
   $$('.view').forEach((v) => { v.hidden = v.id !== 'view-' + view; });
   $$('.tab').forEach((t) => t.classList.toggle('is-active', t.dataset.view === view));
@@ -1560,6 +1599,38 @@ function go(view) {
   if (mainEl) mainEl.scrollTop = 0; else window.scrollTo({ top: 0 });
   refreshActive();
 }
+/* Android geri tusu. Gorunum degisimi ve detay sayfasi tarayici gecmisine
+   yazilir, boylece Capacitor kabugunda geri tusu once ekrani kapatir.
+   En altta 'root' girdisi durur: oraya dusuldugunde iki saniye icinde ikinci
+   kez basilmazsa gecmis yeniden doldurulur ve uygulama kapanmaz. */
+
+let navReady = false;
+function pushNav(state) { if (navReady) history.pushState(state, ''); }
+
+let exitAt = 0;
+function initNav() {
+  history.replaceState({ nav: 'root' }, '');
+  history.pushState({ nav: 'view', view: activeView }, '');
+  navReady = true;
+  window.addEventListener('popstate', (e) => {
+    const st = e.state || { nav: 'root' };
+    if (st.nav === 'root') {
+      if (Date.now() - exitAt < 2000) { history.back(); return; }
+      exitAt = Date.now();
+      history.pushState({ nav: 'view', view: activeView }, '');
+      if (openId) closeSheet(true);
+      toast('Çıkmak için tekrar geri basın');
+      return;
+    }
+    if (st.nav === 'sheet') {
+      if (openId !== st.id) openMovie(st.id, true);
+      return;
+    }
+    if (openId) closeSheet(true);
+    if (st.view && st.view !== activeView) go(st.view, true);
+  });
+}
+
 function refreshActive() {
   renderCounts();
   if (activeView === 'library') renderLibrary();
@@ -1571,6 +1642,7 @@ function refreshActive() {
 
 function init() {
   if (slimDB()) saveDB();   // eski kayitlari kucult (bir kerelik)
+  initNav();
   renderCounts();
 
   // sekmeler
@@ -1583,9 +1655,37 @@ function init() {
   q.addEventListener('input', () => { $('#q-clear').hidden = !q.value; runSearch(q.value); });
   $('#q-clear').addEventListener('click', () => { q.value = ''; $('#q-clear').hidden = true; runSearch(''); q.focus(); });
 
+  // Tümü / Film / Dizi süzgeci
+  const applyType = () => {
+    $('#search-results').dataset.type = searchType;
+    $$('.seg-btn[data-stype]').forEach((x) => {
+      const on = x.dataset.stype === searchType;
+      x.classList.toggle('is-active', on);
+      x.setAttribute('aria-selected', String(on));
+    });
+  };
+  applyType();
+  $$('.seg-btn[data-stype]').forEach((b) => b.addEventListener('click', () => {
+    if (b.dataset.stype === searchType) return;
+    searchType = b.dataset.stype;
+    localStorage.setItem(LS.stype, searchType);
+    applyType();
+    if (q.value.trim()) runSearch(q.value);
+  }));
+
+  // öneri gizleme: sıfırla
+  document.addEventListener('click', (ev) => {
+    if (!ev.target.closest('#rec-undismiss')) return;
+    db.dismissed = [];
+    saveDB();
+    renderDismissNote();
+    toast('Gizlenen öneriler sıfırlandı');
+    buildRecs();
+  });
+
   // liste sekmeleri
-  $$('.seg-btn').forEach((b) => b.addEventListener('click', () => {
-    $$('.seg-btn').forEach((x) => x.classList.remove('is-active'));
+  $$('.seg-btn[data-list]').forEach((b) => b.addEventListener('click', () => {
+    $$('.seg-btn[data-list]').forEach((x) => x.classList.remove('is-active'));
     b.classList.add('is-active');
     currentList = b.dataset.list;
     renderLibrary();
@@ -1621,6 +1721,12 @@ function init() {
 
   // kart tıklama (delegasyon)
   document.addEventListener('click', (ev) => {
+    const dis = ev.target.closest('.dismiss-btn');
+    if (dis) {
+      ev.preventDefault(); ev.stopPropagation();
+      dismissRec(dis.dataset.dismiss);
+      return;
+    }
     const quick = ev.target.closest('.quick-btn');
     if (quick) {
       ev.preventDefault(); ev.stopPropagation();
@@ -1645,7 +1751,7 @@ function init() {
   });
 
   // sheet kapatma
-  $$('[data-close]').forEach((el) => el.addEventListener('click', closeSheet));
+  $$('[data-close]').forEach((el) => el.addEventListener('click', () => closeSheet()));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 
   // ayarlar
@@ -1748,6 +1854,7 @@ function init() {
         Object.entries(inc.movies).forEach(([id, m]) => { if (!db.movies[id]) added++; db.movies[id] = m; });
         slimDB();   // eski yedekler `overview` ve uzun `cast` tasiyor olabilir
         if (inc.genres) db.genres = Object.assign({}, inc.genres, db.genres);
+        if (Array.isArray(inc.dismissed)) db.dismissed = Array.from(new Set(db.dismissed.concat(inc.dismissed)));
         if (inc.aiMemory) { db.aiMemory = trimMemory(inc.aiMemory); localStorage.setItem(LS.memory, db.aiMemory); }
 
         // anahtarlar (yedek anahtarlı alındıysa)

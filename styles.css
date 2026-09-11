@@ -90,6 +90,17 @@ main{max-width:1120px;margin:0 auto;padding:16px 16px 32px}
 .quick-btn.is-on.plan{background:var(--accent)}
 .quick-btn.is-on.plan svg{transform:rotate(45deg)}
 .badge.score{bottom:46px}
+/* öneri kartı: "artık önerme" düğmesi yalnızca Öneriler ızgarasında görünür */
+.dismiss-btn{display:none;position:absolute;top:6px;right:6px;width:30px;height:30px;place-items:center;border:0;border-radius:999px;background:rgba(0,0,0,.62);backdrop-filter:blur(6px);cursor:pointer;padding:0}
+.dismiss-btn svg{width:15px;height:15px;fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round}
+.dismiss-btn:hover{background:var(--red)}
+#rec-results .dismiss-btn{display:grid}
+#rec-results .badges{right:42px}
+.link-btn{border:0;background:none;padding:0;color:var(--accent);font:inherit;font-weight:600;cursor:pointer}
+/* Keşfet: tür süzgeci */
+.seg-type{margin:10px 0 4px}
+#search-results[data-type="movie"] .card-movie[data-card^="tv-"],
+#search-results[data-type="tv"] .card-movie:not([data-card^="tv-"]){display:none}
 /* arama ipuçları */
 .tips{border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);padding:16px;margin-top:8px}
 .tips h3{font-size:15px;margin:0 0 8px}

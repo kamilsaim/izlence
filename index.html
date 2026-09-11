@@ -43,6 +43,11 @@
         <button id="q-clear" class="clear-btn" aria-label="Temizle" hidden>&times;</button>
       </div>
     </div>
+    <div class="seg seg-type" role="tablist" aria-label="Yapım türü">
+      <button class="seg-btn is-active" data-stype="" role="tab" type="button">Tümü</button>
+      <button class="seg-btn" data-stype="movie" role="tab" type="button">Film</button>
+      <button class="seg-btn" data-stype="tv" role="tab" type="button">Dizi</button>
+    </div>
     <div id="search-status" class="status"></div>
     <div id="search-results" class="grid"></div>
     <div id="search-more-wrap" class="more-wrap" hidden>
@@ -109,6 +114,7 @@
     </div>
     <div id="taste-chips" class="chips"></div>
     <div id="rec-status" class="status"></div>
+    <div id="rec-dismissed" class="status" hidden></div>
     <div id="rec-results" class="grid"></div>
     <div id="rec-empty" class="empty">
       <div class="empty-emoji">✨</div>
