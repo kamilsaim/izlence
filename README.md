@@ -22,13 +22,15 @@ Tamamen tarayıcıda çalışır. Hesap yok, sunucu yok, takip yok.
 
 | | |
 | --- | --- |
-| **Keşfet** | Film, dizi, kişi, yıl veya IMDb kodu ile arama. Sonuç çıkmazsa sorgu kademeli gevşetilir. Sonuçlar sayfalanır, altındaki düğmeyle uzar. |
+| **Keşfet** | Film, dizi, kişi, yıl veya IMDb kodu ile arama. Tümü / Film / Dizi süzgeci. Sonuç çıkmazsa sorgu kademeli gevşetilir. Sonuçlar sayfalanır, altındaki düğmeyle uzar. |
 | **Listelerim** | İzlediklerim, Favoriler, İzleyeceklerim. Puan, kişisel not, dizilerde sezon-bölüm takibi. |
-| **Öneriler** | Zevk profiline göre skorlanmış öneriler. İstersen sadece abone olduğun platformlardan. |
+| **Öneriler** | Zevk profiline göre skorlanmış öneriler. İlgilenmediğini X ile gizle, bir daha önerilmez. İstersen sadece abone olduğun platformlardan. |
 | **AI** | Google Gemini zevk profilini okuyup gerekçeli öneri yapar ve seni tanıyan bir hafıza tutar. |
 | **Analiz** | Tür, yönetmen, on yıl dağılımı, ekran süresi ve yıl özeti (Wrapped). |
 
 Telefonda adresi aç, tarayıcı menüsünden **Ana ekrana ekle** de. Uygulama gibi açılır, çevrimdışı çalışır.
+
+**Android:** Google Play'de kapalı test aşamasında (Eylül 2026'dan beri). Android uygulaması aynı siteyi yükler, bu yüzden web sürümüyle her zaman eşittir.
 
 ## Hızlı başlangıç
 
@@ -76,6 +78,8 @@ Bu liste yalnızca örnektir ve koda sabitlenmiş değildir. Google yeni bir sü
 
 Model bulunamazsa, kota dolarsa veya sunucu hatası gelirse bir alttakine geçer, en fazla sekiz deneme yapar. Anahtar hatasında denemeye devam etmez, doğrudan uyarır. Liste on iki saatte bir tazelenir. İstersen Ayarlar'dan tek bir modeli sabitleyebilirsin.
 
+Öneriler ekranında bir kartın X düğmesine basarsan o yapım bir daha önerilmez. Gizlenenler yedeğe girer; öneri başlığının altındaki **Sıfırla** ile hepsi geri gelir.
+
 ## Sürüm ve güncelleme
 
 Uygulama her açılışta ve arka plandan öne geldiğinde sunucudaki sürüm dosyasını okur. Yeni sürüm varsa üstte bir bant çıkar, dokununca tüm önbellek temizlenip uygulama yeniden yüklenir. Ayarlar sekmesinden elle de denetleyebilirsin.
@@ -94,11 +98,13 @@ iOS'ta ana ekrana eklenen sürümde görüntü alanı etiketi kritiktir. `viewpo
 
 Arama tek bir TMDB çağrısı değil, kademeli genişleyen bir zincir: IMDb kodu → yıl filtreli başlık → seçili dilde başlık → orijinal başlık → seri/koleksiyon → kişi → konu/anahtar kelime. İlk dolu gelen kademe kazanır.
 
+Arama kutusunun altındaki **Tümü / Film / Dizi** süzgeci başlık aramasında doğrudan film ya da dizi aramasına gider, böylece sayfalama da seçilen türde devam eder. Kişi, seri, konu ve trend sonuçlarında ise gelen liste ekranda süzülür. Seçim hatırlanır.
+
 Sorgu bir kişinin adıyla birebir eşleşiyorsa (örneğin `Tom Hardy`), aynı adı taşıyan birkaç rastgele başlık yerine doğrudan o kişinin filmografisi listelenir. Uzun sonuç kümeleri kırpılmaz; altındaki **Daha fazla göster** düğmesi başlık ve konu aramasında sonraki TMDB sayfasını çeker, filmografide kırkar kırkar açar.
 
 ## Yol haritası
 
-Android Studio ile APK paketlemesi planlanıyor. Uygulama zaten yüklenebilir bir PWA olduğu için Trusted Web Activity yolu tercih edilecek; site aynı kalır, Android sürümü onu sarmalar.
+**Google Play.** Android sürümü kapalı testte. Capacitor kabuğu siteyi doğrudan `izlence.web.app` adresinden yükler; web'e çıkan her sürüm test kullanıcılarına da anında ulaşır. Sıradaki adım test geri bildirimlerini toplayıp açık teste, ardından üretime geçmek.
 
 **Google ile giriş ve cihazlar arası senkron.** Şu an her şey cihazda duruyor ve tek koruma elle alınan yedek. iOS'ta tarayıcı depolamasının silinebilmesi bunu kırılgan kılıyor, bu yüzden isteğe bağlı bir hesap katmanı eklenecek: giriş yapan kullanıcının verisi buluta yedeklenir ve cihazlar arasında senkronlanır. Giriş zorunlu olmayacak — hesapsız kullanım bugünkü gibi çalışmaya devam edecek, yerel depolama birincil kaynak olarak kalacak.
 
