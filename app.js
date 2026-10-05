@@ -12,8 +12,8 @@ const TMDB = 'https://api.themoviedb.org/3';
 /* uygulama kimligi */
 const APP = {
   name: 'Izlence',
-  version: '1.8.0',
-  build: '2026-09-11',
+  version: '1.8.1',
+  build: '2026-10-05',
   developer: 'kamilsaim',
   site: 'https://izlence.web.app',
 };
@@ -597,7 +597,7 @@ const runSearch = debounce(async (raw) => {
             `<button class="chip" data-person="${x.id}">${esc(x.name)}</button>`).join('');
           const head = others ? `<div class="chip-row">${others}</div>` : '';
           const first = films.slice(0, PERSON_STEP);
-          return done(esc(exactPerson.name) + ' · ' + countMsg(films), first, head,
+          return done(exactPerson.name + ' · ' + countMsg(films), first, head,
             films.length > first.length ? localMore(films, first.length, PERSON_STEP) : null);
         }
       }
@@ -624,7 +624,7 @@ const runSearch = debounce(async (raw) => {
       if (parts.length) {
         const others = cols.slice(1, 4).map((c) =>
           `<button class="chip" data-collection="${c.id}">${esc(c.name)}</button>`).join('');
-        return done(esc(cols[0].name) + ' · ' + parts.length + ' film', parts,
+        return done(cols[0].name + ' · ' + parts.length + ' film', parts,
           others ? `<div class="chip-row">${others}</div>` : '');
       }
     }
@@ -640,7 +640,7 @@ const runSearch = debounce(async (raw) => {
           `<button class="chip" data-person="${x.id}">${esc(x.name)}</button>`).join('');
         const head = `<div class="chip-row">${others}</div>`;
         const first = films.slice(0, PERSON_STEP);
-        return done(esc(person.name) + ' · ' + countMsg(films), first, others ? head : '',
+        return done(person.name + ' · ' + countMsg(films), first, others ? head : '',
           films.length > first.length ? localMore(films, first.length, PERSON_STEP) : null);
       }
     }
@@ -649,7 +649,7 @@ const runSearch = debounce(async (raw) => {
     status.textContent = 'Konu olarak aranıyor…';
     const kw = await keywordTitles(p.text);
     if (kw) {
-      return done('Konu: ' + esc(kw.kw.name) + ' · ' + countMsg(kw.items), kw.items, '',
+      return done('Konu: ' + kw.kw.name + ' · ' + countMsg(kw.items), kw.items, '',
         kw.items.hasMore ? remoteMore(async (page) => {
           const r = await keywordPage(kw.kw, page);
           return r ? r.items : [];
@@ -671,18 +671,23 @@ document.addEventListener('click', async (ev) => {
   const chip = ev.target.closest('.chip[data-person], .chip[data-collection]');
   if (!chip) return;
   const status = $('#search-status'), grid = $('#search-results');
+  const token = ++searchToken;   // bekleyen arama sonucu bu listeyi ezmesin
   status.className = 'status'; status.textContent = 'Yükleniyor…';
   setMore(null);
   try {
     const films = chip.dataset.collection
       ? await collectionParts(chip.dataset.collection)
       : await personFilms({ id: chip.dataset.person });
+    if (token !== searchToken) return;
     status.textContent = chip.textContent + ' · ' + countMsg(films);
     grid.innerHTML = '';
     const first = films.slice(0, PERSON_STEP);
     renderGrid(grid, first);
     if (films.length > first.length) setMore(localMore(films, first.length, PERSON_STEP));
-  } catch (err) { status.className = 'status err'; status.textContent = err.message; }
+  } catch (err) {
+    if (token !== searchToken) return;
+    status.className = 'status err'; status.textContent = err.message;
+  }
 });
 
 // "Daha fazla göster"
@@ -1383,6 +1388,7 @@ function detailView(id, full) {
   if (rich.cast && rich.cast.length) out.cast = rich.cast;
   if (rich.providers && rich.providers.length) out.providers = rich.providers;
   if (rich.providerLink) out.providerLink = rich.providerLink;
+  if (!out.imdb_id && rich.imdb_id) out.imdb_id = rich.imdb_id;
   return out;
 }
 
@@ -1635,7 +1641,13 @@ function refreshActive() {
   renderCounts();
   if (activeView === 'library') renderLibrary();
   if (activeView === 'stats') renderStats();
-  if (activeView === 'search' && $('#q').value) runSearch($('#q').value);
+  // arama/öneri ızgarası yeniden sorgulanmaz: yüklenen sayfalar ve kişi/seri
+  // sonuçları kaybolmasın diye kartlar yerinde tazelenir
+  if (activeView === 'search' || activeView === 'recs') {
+    const grid = $(activeView === 'search' ? '#search-results' : '#rec-results');
+    const ids = new Set($$('[data-card]', grid).map((el) => el.dataset.card));
+    ids.forEach(refreshCard);
+  }
 }
 
 /* ---------------------------------- init --------------------------------- */
@@ -1739,8 +1751,7 @@ function init() {
       return;
     }
     const hit = ev.target.closest('[data-id]');
-    const card = hit && hit.closest('.card-movie');
-    if (card) openMovie(hit.dataset.id);
+    if (hit && (hit.closest('.card-movie') || hit.classList.contains('ai-card'))) openMovie(hit.dataset.id);
   });
 
   // klavye ile afiş açma
@@ -1854,6 +1865,7 @@ function init() {
         Object.entries(inc.movies).forEach(([id, m]) => { if (!db.movies[id]) added++; db.movies[id] = m; });
         slimDB();   // eski yedekler `overview` ve uzun `cast` tasiyor olabilir
         if (inc.genres) db.genres = Object.assign({}, inc.genres, db.genres);
+        if (inc.collections && typeof inc.collections === 'object') db.collections = Object.assign({}, inc.collections, db.collections);
         if (Array.isArray(inc.dismissed)) db.dismissed = Array.from(new Set(db.dismissed.concat(inc.dismissed)));
         if (inc.aiMemory) { db.aiMemory = trimMemory(inc.aiMemory); localStorage.setItem(LS.memory, db.aiMemory); }
 
@@ -2214,6 +2226,7 @@ const REC_SCHEMA = {
           year: { type: 'INTEGER' },
           reason: { type: 'STRING' },      // Türkçe, 1-2 cümle gerekçe
           mood: { type: 'STRING' },        // kısa etiket: "yavaş tempolu dram" vb.
+          type: { type: 'STRING', enum: ['film', 'dizi'] },  // TMDB eşlemesinde film/dizi ayrımı
         },
         required: ['title', 'year', 'reason'],
       },
@@ -2424,7 +2437,7 @@ async function runAI() {
     const items = [];
     for (const rec of recs) {
       const movie = await resolveMovie(rec);
-      if (movie) cacheMovies.set(String(movie.id), movie);
+      if (movie) cacheMovies.set(keyOf(movie), movie);
       items.push({ rec, movie });
     }
 
@@ -2456,7 +2469,7 @@ function restoreAI() {
   try {
     const saved = JSON.parse(localStorage.getItem(LS.airecs) || 'null');
     if (saved && saved.items && saved.items.length) {
-      saved.items.forEach((i) => { if (i.movie) cacheMovies.set(String(i.movie.id), i.movie); });
+      saved.items.forEach((i) => { if (i.movie) cacheMovies.set(keyOf(i.movie), i.movie); });
       renderAIResults(saved.items);
       $('#ai-empty').hidden = true;
       const mins = Math.round((Date.now() - saved.at) / 60000);
@@ -2526,7 +2539,9 @@ function initAI() {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runAI();
   });
   $('#ai-memory-clear').addEventListener('click', () => {
-    localStorage.removeItem(LS.memory); renderMemory(); toast('AI hafızası sıfırlandı');
+    localStorage.removeItem(LS.memory);
+    if (db.aiMemory) { delete db.aiMemory; saveDB(); }   // yedekten geri gelmesin
+    renderMemory(); toast('AI hafızası sıfırlandı');
   });
 
   renderMemory();

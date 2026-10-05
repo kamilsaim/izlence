@@ -12,7 +12,8 @@
       "*.jpeg",
       "*.jpg",
       "bump.mjs",
-      "CLAUDE.md"
+      "CLAUDE.md",
+      "Playfoto/**"
     ],
     "rewrites": [
       {

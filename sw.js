@@ -1,5 +1,5 @@
 /* İzlence service worker — uygulama kabuğu çevrimdışı, TMDB istekleri ağ-önce */
-const VERSION = 'izlence-v1.8.0';
+const VERSION = 'izlence-v1.8.1';
 const SHELL = [
   './',
   './index.html',
@@ -58,7 +58,8 @@ self.addEventListener('fetch', (e) => {
   if (isShell) {
     e.respondWith(
       fetch(req).then((res) => {
-        if (res.ok) caches.open(VERSION).then((c) => c.put(req, res.clone()));
+        // kopya hemen alınmalı: sayfa gövdeyi okumaya başladıktan sonra clone() hata verir
+        if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
         return res;
       }).catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html')))
     );
@@ -70,7 +71,8 @@ self.addEventListener('fetch', (e) => {
     caches.match(req).then((hit) => {
       const net = fetch(req).then((res) => {
         if (res.ok && url.origin === self.location.origin) {
-          caches.open(VERSION).then((c) => c.put(req, res.clone()));
+          const copy = res.clone();
+          caches.open(VERSION).then((c) => c.put(req, copy));
         }
         return res;
       }).catch(() => hit || caches.match('./index.html'));

@@ -1,5 +1,5 @@
 {
-  "version": "1.8.0",
-  "build": "2026-09-11",
-  "notes": "Keşfet'te Film/Dizi süzgeci; önerilerde 'artık önerme' düğmesi"
+  "version": "1.8.1",
+  "build": "2026-10-05",
+  "notes": "AI önerileri açılıyor; hata düzeltmeleri"
 }
