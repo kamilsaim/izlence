@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>İzlence — Gizlilik Politikası</title>
-<meta name="description" content="İzlence gizlilik politikası. Hesap yok, sunucu yok, veriler yalnızca cihazda." />
+<meta name="description" content="İzlence gizlilik politikası. Hesap yok, veri toplanmaz, listelerin yalnızca cihazında." />
 <meta name="theme-color" content="#191919" />
 <link rel="icon" href="icons/icon-192.png" />
 <style>
@@ -28,14 +28,14 @@ hr{border:0;border-top:1px solid var(--border);margin:32px 0}
 <main>
 
 <h1>İzlence — Gizlilik Politikası</h1>
-<p class="muted">Son güncelleme: 9 Eylül 2026</p>
+<p class="muted">Son güncelleme: 5 Ekim 2026</p>
 
 <div class="card">
-<p><b>Kısa özet:</b> İzlence hesap açmaz, sunucusu yoktur ve hiçbir veriyi toplamaz. Listelerin, puanların ve notların yalnızca kendi cihazında saklanır. Geliştirici bu verilere erişemez.</p>
+<p><b>Kısa özet:</b> İzlence hesap açmaz ve hiçbir veriyi toplamaz. Listelerin, puanların ve notların yalnızca kendi cihazında saklanır. Geliştirici bu verilere erişemez.</p>
 </div>
 
 <h2>Toplanan veriler</h2>
-<p>Hiçbiri. Uygulamanın kendi sunucusu yoktur, analitik veya reklam aracı içermez, çerez kullanmaz ve kişisel veri iletmez.</p>
+<p>Hiçbiri. Uygulama analitik veya reklam aracı içermez, çerez kullanmaz, kişisel veri saklamaz ve kimseyle paylaşmaz. Aşağıda anlatılan TMDB ara bağlantısı istekleri yalnızca iletir, kaydetmez.</p>
 
 <h2>Cihazında saklananlar</h2>
 <p>Aşağıdakiler tarayıcının yerel deposunda, yalnızca senin cihazında durur:</p>
@@ -48,9 +48,14 @@ hr{border:0;border-top:1px solid var(--border);margin:32px 0}
 </ul>
 
 <h2>Dışarıya giden istekler</h2>
-<p>Uygulama iki servise bağlanır ve her istek senin kendi erişim anahtarınla, kendi cihazından gider.</p>
+<p>Uygulama film bilgisi için TMDB'ye, isteğe bağlı AI önerileri için Google'a bağlanır.</p>
 <ul>
-  <li><b>TMDB</b> — film ve dizi araması, afişler, özetler ve ekip bilgisi için. Yalnızca aradığın metin ve seçtiğin yapımın kimliği gönderilir.</li>
+  <li><b>TMDB</b> — film ve dizi araması, afişler, özetler ve ekip bilgisi için. Yalnızca aradığın metin ve seçtiğin yapımın kimliği gönderilir.
+    <ul>
+      <li>Kendi TMDB anahtarını girmediysen bu istekler İzlence'nin <b>ortak bağlantısı</b> (Cloudflare üzerinde çalışan küçük bir ara sunucu) üzerinden TMDB'ye iletilir. Ara sunucu istekleri kaydetmez, günlük tutmaz ve kimseyle paylaşmaz. Aynı aramanın tekrar TMDB'ye gitmemesi için yanıtlar en fazla birkaç saat Cloudflare önbelleğinde kimliksiz olarak tutulur. Her internet isteğinde olduğu gibi Cloudflare bağlantıyı iletmek için IP adresini anlık olarak işler (<a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare gizlilik politikası</a>).</li>
+      <li>Kendi anahtarını girdiysen istekler doğrudan cihazından TMDB'ye gider, ara sunucu kullanılmaz.</li>
+    </ul>
+  </li>
   <li><b>Google AI (Gemini)</b> — sadece AI önerileri özelliğini kullanırsan. Zevk profilin metne çevrilip modele gönderilir. Bu özellik isteğe bağlıdır, anahtar girmezsen hiç çalışmaz.</li>
 </ul>
 <p>Bu servislerin kendi gizlilik politikaları geçerlidir: <a href="https://www.themoviedb.org/privacy-policy" target="_blank" rel="noopener">TMDB</a> ve <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google</a>.</p>

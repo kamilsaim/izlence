@@ -8,11 +8,14 @@
 const LS = { key: 'izlence.apikey', lang: 'izlence.lang', db: 'izlence.db' };
 const IMG = 'https://image.tmdb.org/t/p/';
 const TMDB = 'https://api.themoviedb.org/3';
+// Kendi anahtarını girmeyenler için ara sunucu (worker/ klasörü). Anahtar
+// sunucuda durur; kullanıcı anahtar girerse istekler doğrudan TMDB'ye gider.
+const TMDB_PROXY = 'https://izlence-tmdb.saimkamil.workers.dev/3';
 
 /* uygulama kimligi */
 const APP = {
   name: 'Izlence',
-  version: '1.8.1',
+  version: '1.8.2',
   build: '2026-10-05',
   developer: 'kamilsaim',
   site: 'https://izlence.web.app',
@@ -72,6 +75,7 @@ function saveDB() {
 }
 
 const getKey = () => (localStorage.getItem(LS.key) || '').trim();
+const hasTmdb = () => !!getKey() || !!TMDB_PROXY;
 const getLang = () => localStorage.getItem(LS.lang) || 'tr-TR';
 
 /* ---------------------------------- utils -------------------------------- */
@@ -97,18 +101,20 @@ class ApiError extends Error {}
 
 async function tmdb(path, params = {}) {
   const key = getKey();
-  if (!key) throw new ApiError('TMDB anahtarı yok. Ayarlar sekmesinden ekle.');
+  if (!key && !TMDB_PROXY) throw new ApiError('TMDB anahtarı yok. Ayarlar sekmesinden ekle.');
 
-  const url = new URL(TMDB + path);
+  const url = new URL((key ? TMDB : TMDB_PROXY) + path);
   url.searchParams.set('language', getLang());
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v);
   }
 
   const headers = {};
-  const isV4 = key.startsWith('eyJ') || key.length > 60; // JWT read-access token
-  if (isV4) headers.Authorization = 'Bearer ' + key;
-  else url.searchParams.set('api_key', key);
+  if (key) {
+    const isV4 = key.startsWith('eyJ') || key.length > 60; // JWT read-access token
+    if (isV4) headers.Authorization = 'Bearer ' + key;
+    else url.searchParams.set('api_key', key);
+  }
 
   let res;
   try {
@@ -116,8 +122,11 @@ async function tmdb(path, params = {}) {
   } catch (e) {
     throw new ApiError('Ağa ulaşılamıyor. İnternet bağlantını kontrol et (çevrimdışıyken listelerin ve analizlerin çalışır).');
   }
-  if (res.status === 401) throw new ApiError('Anahtar geçersiz (401). Ayarlar’dan TMDB anahtarını kontrol et.');
+  if (res.status === 401) throw new ApiError(key
+    ? 'Anahtar geçersiz (401). Ayarlar’dan TMDB anahtarını kontrol et.'
+    : 'Ortak TMDB bağlantısı şu an çalışmıyor. Ayarlar’dan kendi anahtarını ekleyebilirsin.');
   if (res.status === 429) throw new ApiError('Çok fazla istek (429). Birkaç saniye sonra tekrar dene.');
+  if (!key && res.status >= 500) throw new ApiError('Ortak TMDB bağlantısı yanıt vermedi (' + res.status + '). Biraz sonra dene ya da Ayarlar’dan kendi anahtarını ekle.');
   if (!res.ok) throw new ApiError('TMDB hatası: ' + res.status);
   return res.json();
 }
@@ -217,6 +226,7 @@ function upsert(raw, patch) {
   cur.key = id;
 
   Object.assign(cur, patch);
+  if (cur.watchedAt === undefined) delete cur.watchedAt;
   db.movies[id] = cur;
 
   const any = cur.lists.watched || cur.lists.favorite || cur.lists.watchlist;
@@ -234,7 +244,11 @@ function toggleList(movie, list) {
   // "izledim" ile "izleyeceğim" birbirini dışlar
   if (list === 'watched' && on) lists.watchlist = false;
   if (list === 'watchlist' && on) lists.watched = false;
-  upsert(movie, { lists });
+  const patch = { lists };
+  // izleme tarihi: yıl özeti bunu kullanır (eski kayıtlarda yok, addedAt'e düşülür)
+  if (lists.watched && !(cur && cur.lists.watched)) patch.watchedAt = new Date().toISOString();
+  if (!lists.watched) patch.watchedAt = undefined;
+  upsert(movie, patch);
   toast(on ? LIST_LABEL[list] + ' listesine eklendi' : LIST_LABEL[list] + ' listesinden çıkarıldı');
   return on;
 }
@@ -280,11 +294,71 @@ function quickHTML(m) {
   </div>`;
 }
 
+/* ------------------------------ yeni bölüm takibi -------------------------
+   Listedeki dizilerin son/sıradaki bölüm tarihi TMDB'den çekilip ayrı bir
+   önbellekte tutulur (izlence.epcache). Kullanıcı verisi değildir, yedeğe
+   girmez; silinse de bir sonraki taramada yeniden dolar. */
+LS.epcache = 'izlence.epcache';
+const EP_TTL = 12 * 60 * 60 * 1000;           // devam eden dizi: 12 saatte bir
+const EP_TTL_DONE = 7 * 24 * 60 * 60 * 1000;  // bitmiş dizi: haftada bir
+let epCache = (() => {
+  try { const c = JSON.parse(localStorage.getItem(LS.epcache) || '{}'); return c && typeof c === 'object' ? c : {}; }
+  catch (e) { return {}; }
+})();
+function saveEpCache() {
+  try { localStorage.setItem(LS.epcache, JSON.stringify(epCache)); } catch (e) { /* kota: önbellek, yoksay */ }
+}
+const epOf = (x) => (x && x.air_date ? { s: x.season_number, e: x.episode_number, d: x.air_date } : null);
+const isDone = (st) => st === 'Ended' || st === 'Canceled';
+function rememberEpisodes(key, d) {
+  epCache[key] = { at: Date.now(), next: epOf(d.next_episode_to_air), last: epOf(d.last_episode_to_air), status: d.status || '' };
+  saveEpCache();
+}
+const today = () => new Date().toISOString().slice(0, 10);
+const daysFrom = (iso) => Math.round((new Date(iso + 'T00:00:00') - new Date(today() + 'T00:00:00')) / 86400000);
+const shortDate = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+
+// kart rozeti: son 7 günde yeni bölüm çıktıysa "Yeni bölüm", 30 gün içinde çıkacaksa tarihi
+function epBadge(k) {
+  const c = epCache[k];
+  if (!c) return '';
+  if (c.last && daysFrom(c.last.d) <= 0 && daysFrom(c.last.d) >= -7) return '<span class="badge new">Yeni bölüm</span>';
+  if (c.next && daysFrom(c.next.d) >= 0 && daysFrom(c.next.d) <= 30) return '<span class="badge new">▶ ' + esc(shortDate(c.next.d)) + '</span>';
+  return '';
+}
+
+// listedeki dizileri sırayla tazele (en fazla 25 istek / tur)
+let epScanning = false;
+async function refreshEpisodes() {
+  if (epScanning || !hasTmdb() || !navigator.onLine) return;
+  const now = Date.now();
+  const due = allItems().filter((m) => {
+    if (m.mtype !== 'tv') return false;
+    const c = epCache[m.key];
+    return !c || now - c.at > (isDone(c.status) ? EP_TTL_DONE : EP_TTL);
+  }).slice(0, 25);
+  if (!due.length) return;
+  epScanning = true;
+  try {
+    for (const m of due) {
+      try {
+        const d = await tmdb('/tv/' + parseKey(m.key).id);
+        rememberEpisodes(m.key, d);
+        refreshCard(m.key);
+      } catch (e) {
+        if (/429/.test(String(e && e.message))) break;   // kota: sonraki açılışa kalsın
+      }
+      await sleep(150);
+    }
+  } finally { epScanning = false; }
+}
+
 function cardHTML(m) {
   const k = keyOf(m);
   const e = entry(k);
   const badges = [];
   if (m.mtype === 'tv') badges.push('<span class="badge tv">Dizi</span>');
+  if (m.mtype === 'tv' && e) { const nb = epBadge(k); if (nb) badges.push(nb); }
   const pr = e && e.progress;
   if (pr && pr.s) badges.push('<span class="badge prog">S' + pr.s + (pr.e ? '·B' + pr.e : '') + '</span>');
   if (e) {
@@ -524,7 +598,7 @@ const runSearch = debounce(async (raw) => {
   setMore(null);
   if (!raw.trim()) {
     grid.innerHTML = ''; status.textContent = ''; status.className = 'status'; empty.hidden = false;
-    if (getKey()) {
+    if (hasTmdb()) {
       try {
         await ensureGenres();
         const tr = await trendingNow();
@@ -978,7 +1052,7 @@ async function fetchProviders() {
 async function renderProviderPicker() {
   const box = $('#prov-list');
   if (!box) return;
-  if (!getKey()) { box.innerHTML = '<p class="muted small">TMDB anahtarini kaydettikten sonra platform listesi yuklenir.</p>'; return; }
+  if (!hasTmdb()) { box.innerHTML = '<p class="muted small">TMDB anahtarini kaydettikten sonra platform listesi yuklenir.</p>'; return; }
   box.innerHTML = '<p class="muted small">Platformlar yukleniyor...</p>';
   try {
     const providers = await fetchProviders();
@@ -1096,7 +1170,7 @@ function renderStats() {
     </div>
 
     <div class="card"><h3>Yıl özeti · Wrapped</h3>
-      <p class="muted">Listeye ekleme tarihine göre hesaplanır.</p>
+      <p class="muted">İzlediklerin, izleme tarihine göre. Eski kayıtlarda listeye eklenme tarihi kullanılır.</p>
       <div class="row"><select id="wrap-year" class="input" aria-label="Yıl">${wrapYears().map((y) =>
         `<option value="${y}">${y}</option>`).join('')}</select></div>
       <div id="wrap-body">${wrapBody(wrapYears()[0])}</div>
@@ -1117,17 +1191,21 @@ function renderStats() {
 
 /* ------------------------------ yil ozeti -------------------------------- */
 
+/* Yıl özeti izlenenleri izleme tarihine göre sayar. v1.8.2 öncesi kayıtlarda
+   watchedAt yok; onlarda listeye eklenme tarihi kullanılır. */
+const wrapDate = (m) => String(m.watchedAt || m.addedAt || '');
+
 function wrapYears() {
   const ys = new Set();
-  allItems().forEach((m) => { const y = String(m.addedAt || '').slice(0, 4); if (y.length === 4) ys.add(y); });
+  listItems('watched').forEach((m) => { const y = wrapDate(m).slice(0, 4); if (y.length === 4) ys.add(y); });
   ys.add(String(new Date().getFullYear()));
   return Array.from(ys).sort().reverse();
 }
 
 function wrapBody(y) {
   const yr = String(y);
-  const items = allItems().filter((m) => String(m.addedAt || '').slice(0, 4) === yr);
-  if (!items.length) return '<p class="muted">' + yr + ' yılında listeye eklenen yapım yok.</p>';
+  const items = listItems('watched').filter((m) => wrapDate(m).slice(0, 4) === yr);
+  if (!items.length) return '<p class="muted">' + yr + ' yılında izlediğin yapım yok.</p>';
 
   const films = items.filter((m) => m.mtype !== 'tv');
   const series = items.filter((m) => m.mtype === 'tv');
@@ -1145,7 +1223,7 @@ function wrapBody(y) {
 
   const best = rated.slice().sort((a, b) => b.myRating - a.myRating).slice(0, 3);
   const months = {};
-  items.forEach((m) => { const mo = String(m.addedAt || '').slice(5, 7); if (mo) months[mo] = (months[mo] || 0) + 1; });
+  items.forEach((m) => { const mo = wrapDate(m).slice(5, 7); if (mo) months[mo] = (months[mo] || 0) + 1; });
   const topM = Object.entries(months).sort((a, b) => b[1] - a[1])[0];
   const MO = ['', 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 
@@ -1356,6 +1434,7 @@ async function openMovie(id, fromPop) {
       providerLink: prov.link || null,
     }), pk.type);
     cacheMovies.set(String(id), full);
+    if (pk.type === 'tv') rememberEpisodes(String(id), d);
     if (db.movies[String(id)]) upsert(full, {});
   } catch (e) { /* çevrimdışı: elimizdeki veriyle devam */ }
 
@@ -1390,6 +1469,18 @@ function detailView(id, full) {
   if (rich.providerLink) out.providerLink = rich.providerLink;
   if (!out.imdb_id && rich.imdb_id) out.imdb_id = rich.imdb_id;
   return out;
+}
+
+function epLine(k) {
+  const c = epCache[k];
+  if (!c) return '';
+  const lab = (x) => 'S' + x.s + '·B' + x.e;
+  const bits = [];
+  if (c.next) bits.push('Sıradaki bölüm: <b>' + lab(c.next) + '</b> · ' + esc(shortDate(c.next.d))
+    + (daysFrom(c.next.d) > 0 ? ' (' + daysFrom(c.next.d) + ' gün sonra)' : ''));
+  else if (c.last) bits.push('Son bölüm: ' + lab(c.last) + ' · ' + esc(shortDate(c.last.d)));
+  if (isDone(c.status)) bits.push(c.status === 'Ended' ? 'dizi tamamlandı' : 'dizi iptal edildi');
+  return bits.length ? '<div class="status">' + bits.join(' · ') + '</div>' : '';
 }
 
 function renderDetail(m, loading) {
@@ -1429,7 +1520,8 @@ function renderDetail(m, loading) {
       <button class="btn btn-mini" data-prog="next">+1 bölüm</button>
       <button class="btn btn-mini" data-prog="clear">Sıfırla</button>
     </div>
-    ${(e && e.progress && e.progress.s && m.seasons) ? `<div class="status">${Math.round((((e.progress.s - 1) / m.seasons) * 100))}% civarı ilerledin · ${m.seasons} sezonluk dizi</div>` : ''}` : ''}
+    ${(e && e.progress && e.progress.s && m.seasons) ? `<div class="status">${Math.round((((e.progress.s - 1) / m.seasons) * 100))}% civarı ilerledin · ${m.seasons} sezonluk dizi</div>` : ''}
+    ${epLine(keyOf(m))}` : ''}
 
     <label class="field-label">Puanım</label>
     <div class="rate">${Array.from({ length: 10 }, (_, i) =>
@@ -1531,7 +1623,7 @@ function parseCSV(text) {
 async function importImdbCsv(file) {
   const st = $('#imdb-status');
   const setS = (cls, msg) => { st.className = 'status' + (cls ? ' ' + cls : ''); st.textContent = msg; };
-  if (!getKey()) return setS('err', 'Önce TMDB anahtarını kaydet.');
+  if (!hasTmdb()) return setS('err', 'Önce TMDB anahtarını kaydet.');
 
   let rows;
   try { rows = parseCSV(await file.text()); } catch (e) { return setS('err', 'Dosya okunamadı.'); }
@@ -1576,7 +1668,8 @@ async function importImdbCsv(file) {
     };
     if (rating >= 1 && rating <= 10) patch.myRating = rating;
     const dt = iDate >= 0 ? new Date(r[iDate]) : null;
-    if (dt && !isNaN(dt.getTime())) patch.addedAt = dt.toISOString();
+    if (dt && !isNaN(dt.getTime())) { patch.addedAt = dt.toISOString(); patch.watchedAt = patch.addedAt; }
+    else if (!(cur && cur.watchedAt)) patch.watchedAt = new Date().toISOString();
     upsert(hit, patch);
     if (storageFull) {   // kota doldu: devam etmek anlamsiz, yazilamiyor
       refreshActive();
@@ -1771,6 +1864,11 @@ function init() {
   $('#apikey-save').addEventListener('click', async () => {
     localStorage.setItem(LS.key, keyInput.value.trim());
     const s = $('#apikey-status');
+    if (!getKey()) {   // kutu boş kaydedildi: ortak bağlantıya dön
+      s.className = 'status ok'; s.textContent = '✓ Kendi anahtarın kaldırıldı, ortak bağlantı kullanılıyor.';
+      refreshKeyPrompts();
+      return;
+    }
     s.className = 'status'; s.textContent = 'Doğrulanıyor…';
     try {
       await tmdb('/configuration');
@@ -1795,7 +1893,7 @@ function init() {
   });
   $('#keys-warn').hidden = !keyBox.checked;
 
-  $('#export').addEventListener('click', () => {
+  $('#export').addEventListener('click', async () => {
     const withKeys = keyBox.checked;
     const out = Object.assign({}, db, { app: { name: APP.name, version: APP.version } });
     if (withKeys) {
@@ -1807,17 +1905,22 @@ function init() {
         providers: getProviders(),
       };
     }
-    const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'izlence' + (withKeys ? '-anahtarli-' : '-') + new Date().toISOString().slice(0, 10) + '.json';
-    a.click(); URL.revokeObjectURL(a.href);
+    const name = 'izlence' + (withKeys ? '-anahtarli-' : '-') + new Date().toISOString().slice(0, 10) + '.json';
     const st = $('#data-status');
+    let how;
+    try { how = await saveBackup(JSON.stringify(out, null, 2), name); }
+    catch (e) {
+      st.className = 'status err';
+      st.textContent = 'Yedek kaydedilemedi: ' + (e && e.message ? e.message : 'bilinmeyen hata');
+      return;
+    }
+    if (how === 'cancel') return;
+    const verb = how === 'clipboard' ? 'panoya kopyalandı' : (how === 'share' ? 'hazırlandı' : 'indirildi');
     st.className = 'status' + (withKeys ? '' : ' ok');
-    st.textContent = withKeys
-      ? '⚠️ Yedek indirildi — içinde API anahtarların var, bu dosyayı kimseyle paylaşma.'
-      : '✓ Yedek indirildi (anahtarlar dahil edilmedi).';
-    toast('Yedek indirildi');
+    st.textContent = (withKeys ? '⚠️ Yedek ' + verb + ' — içinde API anahtarların var, kimseyle paylaşma.'
+      : '✓ Yedek ' + verb + ' (anahtarlar dahil edilmedi).')
+      + (how === 'clipboard' ? ' Bir nota ya da Drive’a yapıştırıp sakla. Uygulamayı güncellersen yedek doğrudan dosya olarak kaydedilir.' : '');
+    toast('Yedek ' + verb);
     localStorage.setItem(LS.lastbackup, String(Date.now()));
     renderBackupStatus();
   });
@@ -1933,6 +2036,8 @@ function init() {
 
   blockZoom();
   backupReminder();
+  ensurePersist();
+  setTimeout(refreshEpisodes, 4000);
 
   checkUpdate(false);
   document.addEventListener('visibilitychange', () => {
@@ -1973,7 +2078,7 @@ function blockZoom() {
 
 function refreshKeyPrompts() {
   const sBtn = $('#search-key-cta');
-  if (sBtn) sBtn.hidden = !!getKey();
+  if (sBtn) sBtn.hidden = hasTmdb();
 
   const aBtn = $('#ai-key-cta');
   if (aBtn) aBtn.hidden = !!getGKey();
@@ -1983,6 +2088,64 @@ function refreshKeyPrompts() {
     aTxt.textContent = getGKey()
       ? 'En az 3 film ekle, sonra "Oneri iste" dugmesine bas. Gemini zevkini yorumlayip neden onerdigini de yazar.'
       : 'Ucretsiz bir Google AI Studio anahtari gir, en az 3 film ekle. Gemini zevkini yorumlayip neden onerdigini de yazar.';
+  }
+}
+
+/* ------------------------------ yedegi kaydet -----------------------------
+   Tarayicida dosya indirilir. Android kabugunun WebView'i indirmeyi
+   desteklemiyor; orada dosya Filesystem eklentisiyle onbellege yazilip
+   paylasim menusuyle verilir (Dosyalar, Drive...). Eklentisiz eski APK'da
+   son care olarak JSON panoya kopyalanir. */
+
+const isNativeShell = () => !!(window.Capacitor && Array.isArray(window.Capacitor.PluginHeaders));
+
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+}
+
+async function saveBackup(json, name) {
+  if (isNativeShell()) {
+    const P = window.Capacitor.Plugins || {};
+    if (P.Filesystem && P.Share) {
+      const w = await P.Filesystem.writeFile({ path: name, data: json, directory: 'CACHE', encoding: 'utf8' });
+      try {
+        await P.Share.share({ title: 'İzlence yedeği', files: [w.uri], dialogTitle: 'Yedeği kaydet' });
+      } catch (e) {
+        if (/cancel/i.test(String(e && e.message))) return 'cancel';
+        throw e;
+      }
+      return 'share';
+    }
+    await copyText(json);
+    return 'clipboard';
+  }
+  const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);   // hemen iptal edilirse bazi tarayicilar indirmez
+  return 'download';
+}
+
+/* ---------------------------- kalici depolama -----------------------------
+   Tarayici yer acarken "kalici" isaretli siteyi silmez. Kurulu PWA ve
+   Android'de istek genelde sessizce onaylanir. Veriye dokunmaz, yalnizca
+   koruma ekler. */
+
+async function ensurePersist() {
+  const el = $('#persist-status');
+  const st = navigator.storage;
+  if (!st || !st.persist) return;
+  let ok = false;
+  try { ok = (st.persisted && await st.persisted()) || await st.persist(); } catch (e) { /* yoksay */ }
+  if (el) {
+    el.className = 'status' + (ok ? ' ok' : '');
+    el.textContent = ok
+      ? '✓ Kalıcı depolama açık: tarayıcı yer açarken verilerini silmez.'
+      : 'Tarayıcı kalıcı depolamayı onaylamadı; düzenli yedek almayı unutma.';
   }
 }
 
@@ -2077,7 +2240,7 @@ async function applyUpdate() {
     if (swReg && swReg.waiting) swReg.waiting.postMessage({ type: 'SKIP_WAITING' });
     if ('caches' in window) {
       const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k)));
+      await Promise.all(keys.filter((k) => k !== 'izlence-img').map((k) => caches.delete(k)));   // afişler kalsın
     }
     const regs = navigator.serviceWorker ? await navigator.serviceWorker.getRegistrations() : [];
     await Promise.all(regs.map((r) => r.unregister().catch(() => false)));
@@ -2361,7 +2524,7 @@ Kurallar:
 /* ------------------------------ TMDB ile eşleme -------------------------- */
 
 async function resolveMovie(rec) {
-  if (!getKey()) return null;
+  if (!hasTmdb()) return null;
   try {
     let hits = await searchTitles(rec.title, { year: rec.year });
     if (!hits.length) hits = await searchTitles(rec.title);
@@ -2556,12 +2719,7 @@ document.addEventListener('click', async (ev) => {
   if (!b) return;
   const text = b.dataset.copy || '';
   try {
-    if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
-    else {
-      const ta = document.createElement('textarea');
-      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-    }
+    await copyText(text);
     const old = b.textContent; b.textContent = '✓ Kopyalandı';
     setTimeout(() => { b.textContent = old; }, 1400);
   } catch (e) { toast('Kopyalanamadı, elle seçip kopyalayabilirsin'); }

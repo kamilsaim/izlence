@@ -172,8 +172,8 @@
     <div class="section-head"><div><h1>Ayarlar</h1><p class="sub">Anahtar ve veri yönetimi.</p></div></div>
 
     <div class="card">
-      <h3>TMDB API anahtarı</h3>
-      <p class="muted">themoviedb.org &rarr; Settings &rarr; API bölümünden ücretsiz alınır. Anahtar yalnızca bu cihazda (localStorage) saklanır, hiçbir sunucuya gönderilmez.</p>
+      <h3>TMDB API anahtarı — isteğe bağlı</h3>
+      <p class="muted">Anahtar girmeden de arama yapabilirsin: istekler İzlence’nin ortak bağlantısı üzerinden TMDB’ye gider. İstersen themoviedb.org &rarr; Settings &rarr; API bölümünden ücretsiz kendi anahtarını alıp buraya girebilirsin; o zaman istekler doğrudan TMDB’ye gider. Anahtar yalnızca bu cihazda saklanır. Boş bırakıp kaydedersen ortak bağlantıya dönülür.</p>
       <div class="row">
         <input id="apikey" class="input" type="password" placeholder="v3 API Key veya v4 Read Access Token" autocomplete="off" />
         <button id="apikey-save" class="btn btn-primary">Kaydet</button>
@@ -283,6 +283,7 @@
       </div>
       <div id="data-status" class="status"></div>
       <div id="backup-status" class="status"></div>
+      <div id="persist-status" class="status"></div>
     </div>
 
     <div class="card">

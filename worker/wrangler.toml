@@ -1,0 +1,10 @@
+name = "izlence-tmdb"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+# TMDB anahtarı burada DEĞİL, gizli değişken olarak durur:
+#   npx wrangler secret put TMDB_KEY
+# Kayıt tutulmaz: gözlem/log kapalı.
+[observability]
+enabled = false

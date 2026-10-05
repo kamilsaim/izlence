@@ -1,5 +1,16 @@
 /* İzlence service worker — uygulama kabuğu çevrimdışı, TMDB istekleri ağ-önce */
-const VERSION = 'izlence-v1.8.1';
+// Afişler değişmez: önbellekleri sürümden bağımsız tutulur, güncellemede silinmez.
+// Sınırsız büyümesin diye en eski kayıtlar atılır.
+const IMG_CACHE = 'izlence-img';
+const IMG_MAX = 400;
+let imgPuts = 0;
+function trimImages(cache) {
+  return cache.keys().then((keys) => (keys.length > IMG_MAX
+    ? Promise.all(keys.slice(0, keys.length - IMG_MAX).map((k) => cache.delete(k)))
+    : null));
+}
+
+const VERSION = 'izlence-v1.8.2';
 const SHELL = [
   './',
   './index.html',
@@ -22,7 +33,7 @@ self.addEventListener('message', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== IMG_CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -35,9 +46,11 @@ self.addEventListener('fetch', (e) => {
   // TMDB afişleri: cache-first (değişmez içerik)
   if (url.hostname === 'image.tmdb.org') {
     e.respondWith(
-      caches.open(VERSION + '-img').then((cache) =>
+      caches.open(IMG_CACHE).then((cache) =>
         cache.match(req).then((hit) => hit || fetch(req).then((res) => {
-          if (res.ok) cache.put(req, res.clone());
+          if (res.ok) {
+            cache.put(req, res.clone()).then(() => { if (++imgPuts % 25 === 0) return trimImages(cache); }).catch(() => {});
+          }
           return res;
         }).catch(() => hit))
       )
@@ -46,7 +59,7 @@ self.addEventListener('fetch', (e) => {
   }
 
   // TMDB API: network-only (anahtar içerdiği için önbelleklenmez)
-  if (url.hostname === 'api.themoviedb.org') return;
+  if (url.hostname === 'api.themoviedb.org' || url.hostname.endsWith('.workers.dev')) return;
 
   // Surum dosyasi: her zaman agdan, hic onbelleklenmez
   if (url.origin === self.location.origin && url.pathname.endsWith('/version.json')) return;

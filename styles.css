@@ -273,6 +273,7 @@ textarea.input{min-height:76px;padding:10px 12px;resize:vertical;width:100%;font
 
 /* dizi ilerlemesi */
 .badge.prog{background:rgba(70,161,113,.92)}
+.badge.new{background:rgba(217,115,13,.94)}
 .prog-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px}
 .prog-lab{font-size:13px;color:var(--text2)}
 .prog-in{width:76px;text-align:center}

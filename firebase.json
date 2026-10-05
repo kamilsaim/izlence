@@ -13,7 +13,8 @@
       "*.jpg",
       "bump.mjs",
       "CLAUDE.md",
-      "Playfoto/**"
+      "Playfoto/**",
+      "worker/**"
     ],
     "rewrites": [
       {
