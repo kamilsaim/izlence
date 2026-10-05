@@ -4,3 +4,4 @@ node_modules/
 .firebase/
 CLAUDE.md
 .wrangler/
+data_safety_export.csv

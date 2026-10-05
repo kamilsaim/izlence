@@ -14,7 +14,8 @@
       "bump.mjs",
       "CLAUDE.md",
       "Playfoto/**",
-      "worker/**"
+      "worker/**",
+      "*.csv"
     ],
     "rewrites": [
       {
